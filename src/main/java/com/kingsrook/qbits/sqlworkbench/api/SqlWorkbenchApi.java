@@ -187,7 +187,8 @@ public class SqlWorkbenchApi
          body.get("cellKey") == null ? null : body.get("cellKey").toString(),
          intOrNull(body.get("pageSize")),
          body.get("confirmToken") == null ? null : body.get("confirmToken").toString(),
-         Boolean.TRUE.equals(body.get("acknowledgeRowGuard")));
+         Boolean.TRUE.equals(body.get("acknowledgeRowGuard")),
+         body.get("executionUuid") == null ? null : body.get("executionUuid").toString());
       return (engine.execute(request, caller));
    }
 

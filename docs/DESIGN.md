@@ -286,7 +286,8 @@ GET  /capabilities
 GET  /schema/{backendName}?refresh=bool          -> Schema (see 4.6)
 POST /execute
   body: { backendName, sql, params?: {name: value}, mode?: READ_ONLY|WRITE, notebookId?, cellKey?,
-          pageSize?, confirmToken?, acknowledgeRowGuard? }
+          pageSize?, confirmToken?, acknowledgeRowGuard?,
+          executionUuid? }   # optional client-chosen UUID, so the client can cancel before the response
   200 (READ_ONLY / commit): { executionUuid, status, mode, statements: [{index, kind, leadingKeyword, affectedRows?}],
           columns: [Column], rows: [[...]], rowCount, hasMore, truncated, truncatedReason?, durationMs,
           rowsAffected? }

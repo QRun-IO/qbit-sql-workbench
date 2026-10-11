@@ -32,10 +32,24 @@ import java.util.Map;
  ** @param pageSize            rows in the first page (optional)
  ** @param confirmToken        write mode: the preview's token (commit)
  ** @param acknowledgeRowGuard write mode: the caller accepted the row guard
+ ** @param executionUuid       optional client-chosen id (a UUID), so the client
+ **                            can cancel the run before it answers; generated
+ **                            when absent
  *******************************************************************************/
 public record ExecutionRequest(String backendName, String sql, Map<String, Object> params, boolean write, Integer notebookId, String cellKey,
-                               Integer pageSize, String confirmToken, boolean acknowledgeRowGuard)
+                               Integer pageSize, String confirmToken, boolean acknowledgeRowGuard, String executionUuid)
 {
+
+   /*******************************************************************************
+    ** Without a client-chosen execution id.
+    *******************************************************************************/
+   public ExecutionRequest(String backendName, String sql, Map<String, Object> params, boolean write, Integer notebookId, String cellKey,
+                           Integer pageSize, String confirmToken, boolean acknowledgeRowGuard)
+   {
+      this(backendName, sql, params, write, notebookId, cellKey, pageSize, confirmToken, acknowledgeRowGuard, null);
+   }
+
+
 
    /*******************************************************************************
     ** A read-only request.

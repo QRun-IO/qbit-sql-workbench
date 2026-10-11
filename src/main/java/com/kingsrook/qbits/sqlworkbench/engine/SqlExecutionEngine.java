@@ -74,6 +74,8 @@ public class SqlExecutionEngine
 {
    private static final QLogger LOG = QLogger.getLogger(SqlExecutionEngine.class);
 
+   private static final java.util.regex.Pattern UUID_PATTERN = java.util.regex.Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+
    private final SqlWorkbenchRuntime    runtime;
    private final SqlWorkbenchQBitConfig config;
    private final WorkbenchBackends      backends;
@@ -109,6 +111,11 @@ public class SqlExecutionEngine
     *******************************************************************************/
    public Map<String, Object> execute(ExecutionRequest request, Caller caller) throws QException
    {
+      if(request.executionUuid() != null && !UUID_PATTERN.matcher(request.executionUuid()).matches())
+      {
+         throw (new QBadRequestException("executionUuid must be a UUID."));
+      }
+
       WorkbenchBackends.Target target     = backends.getTarget(request.backendName());
       Map<String, Object>      params     = request.params() == null ? Map.of() : request.params();
       SqlWorkbenchExecution    audit      = newAudit(request, caller, params, request.write() ? ExecutionMode.WRITE_PREVIEW : ExecutionMode.READ_ONLY);
@@ -782,7 +789,7 @@ public class SqlExecutionEngine
    private SqlWorkbenchExecution newAudit(ExecutionRequest request, Caller caller, Map<String, Object> params, ExecutionMode mode)
    {
       return (new SqlWorkbenchExecution()
-         .withExecutionUuid(UUID.randomUUID().toString())
+         .withExecutionUuid(request.executionUuid() != null ? request.executionUuid().toLowerCase() : UUID.randomUUID().toString())
          .withUserId(caller.userId())
          .withUserName(caller.userName())
          .withBackendName(request.backendName())

@@ -391,6 +391,24 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
+    ** A client-chosen execution id is used (so the client can cancel early),
+    ** and must be a UUID.
+    *******************************************************************************/
+   @Test
+   void testClientExecutionUuid() throws Exception
+   {
+      String uuid = "0F8FAD5B-D9CB-469F-A165-70867728950E";
+      Map<String, Object> response = engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 1", Map.of(), false, null, null, null, null, false, uuid), caller(READER));
+      assertThat(response.get("executionUuid")).isEqualTo(uuid.toLowerCase());
+      assertThat(audits().get(0).getExecutionUuid()).isEqualTo(uuid.toLowerCase());
+
+      assertThatThrownBy(() -> engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 1", Map.of(), false, null, null, null, null, false, "not-a-uuid"), caller(READER)))
+         .isInstanceOf(QBadRequestException.class);
+   }
+
+
+
+   /*******************************************************************************
     **
     *******************************************************************************/
    @Test
