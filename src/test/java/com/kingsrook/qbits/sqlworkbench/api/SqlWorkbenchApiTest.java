@@ -202,6 +202,13 @@ class SqlWorkbenchApiTest extends BaseSqlWorkbenchTest
    {
       assertThat(ResultExporter.csvLine(java.util.Arrays.asList("a,b", null, 1, true, "say \"hi\"", List.of(1, 2))))
          .isEqualTo("\"a,b\",,1,true,\"say \"\"hi\"\"\",\"[1,2]\"\r\n");
+      ///////////////////////////////////////////////////////////////
+      // text that a spreadsheet would run as a formula is quoted; //
+      // numbers (even negative) are not                           //
+      ///////////////////////////////////////////////////////////////
+      assertThat(ResultExporter.csvLine(java.util.Arrays.asList("=HYPERLINK(\"x\")", "+1", "-2", "@SUM(A1)", "\tx", "\rx", -3, "a=b", "")))
+         .isEqualTo("\"'=HYPERLINK(\"\"x\"\")\",'+1,'-2,'@SUM(A1),'\tx,\"'\rx\",-3,a=b,\r\n");
+      assertThat(ResultExporter.csvLine(List.of("=1+1", "ok"))).startsWith("'=1+1,ok");
       assertThat(ResultExporter.uniqueLabels(List.of(new ColumnInfo("a", "a", "int", 4, "number"), new ColumnInfo("a", "a", "int", 4, "number"), new ColumnInfo("b", null, "int", 4, "number"))))
          .containsExactly("a", "a_2", "b");
       assertThatThrownBy(() -> ResultExporter.Format.of("pdf")).isInstanceOf(QBadRequestException.class);

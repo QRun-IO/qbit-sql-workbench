@@ -147,6 +147,22 @@ public class ResultExporter
 
 
    /*******************************************************************************
+    ** CSV formula injection: a spreadsheet runs a text cell that starts with
+    ** =, +, -, @, tab or CR as a formula. Prefix those with a quote so they
+    ** open as text. (Numbers are written as numbers and are left alone.)
+    *******************************************************************************/
+   static String neutralizeFormula(String text)
+   {
+      if(!text.isEmpty() && "=+-@\t\r".indexOf(text.charAt(0)) >= 0)
+      {
+         return ("'" + text);
+      }
+      return (text);
+   }
+
+
+
+   /*******************************************************************************
     **
     *******************************************************************************/
    static String csvLine(List<?> values)
@@ -163,7 +179,7 @@ public class ResultExporter
          {
             continue;
          }
-         String text = value instanceof String s ? s : value instanceof Number || value instanceof Boolean ? value.toString() : JsonUtils.toJson(value);
+         String text = value instanceof String s ? neutralizeFormula(s) : value instanceof Number || value instanceof Boolean ? value.toString() : JsonUtils.toJson(value);
          if(text.contains(",") || text.contains("\"") || text.contains("\n") || text.contains("\r"))
          {
             text = "\"" + text.replace("\"", "\"\"") + "\"";
