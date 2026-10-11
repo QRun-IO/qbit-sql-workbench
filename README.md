@@ -15,7 +15,7 @@ The full design (architecture, data model, security model, limits, API contract,
 
 ## Requirements
 
-- Java 21 and QQQ 4.1 (built against `4.1.0-RC.1`).
+- Java 21 and QQQ 4.1 (built against `4.1.0-RC.2`).
 - `qqq-backend-module-rdbms` for the targets. `qqq-middleware-javalin` for the REST routes; it is optional, and without it the engine still works but no routes are registered.
 - A Next UI release that renders the `SQL_WORKBENCH` widget.
 
@@ -74,17 +74,22 @@ Everything is denied by default.
 
 | Permission | Grants |
 |---|---|
-| `sqlWorkbench.hasAccess` | The app, widget, tables, and every endpoint: read-only SQL, EXPLAIN, schema, notebooks, history |
+| `sqlWorkbench.hasAccess` | The app, widget, and every workbench endpoint: read-only SQL, EXPLAIN, schema, your notebooks and the shared library, your history |
 | `sqlWorkbench.write` | Write mode (preview and commit) and EXPLAIN ANALYZE |
 | `sqlWorkbench.share` | Publishing your notebooks to the shared library |
+| `sqlWorkbenchAdmin.hasAccess` | The qbit's five tables in the generic QQQ table UI / API (`/qqq/v1/table/...`): **every** user's notebooks (personal ones included), cells, versions, pinned result snapshots (real query data), and the full execution audit |
 
-The names are configurable (`accessPermissionBaseName`, `writePermissionName`, `sharePermissionName`).
+The names are configurable (`accessPermissionBaseName`, `writePermissionName`, `sharePermissionName`, `adminPermissionBaseName`).
+
+Grant `sqlWorkbenchAdmin.hasAccess` only to administrators or auditors. Ordinary workbench users do not need it: the workbench endpoints check ownership, visibility, and the share permission themselves, then read and write the tables as the system user. Without the admin permission a user cannot reach another user's personal notebook or audit row through the generic table API. Cells, versions, snapshots, and the audit are read-only even for admins (insert, edit, and delete are disabled; only the qbit writes them).
 
 `write` and `share` are plain session permissions. QQQ 4.1 does not list them as available permissions, so grant them where you grant roles, for example in an authentication customizer.
 
 `writeModeEnabled=false` turns write mode off for everyone.
 
 ## Safety model
+
+> **Production: configure `readOnlyCredentials` for every target backend.** Use a dedicated database role with `SELECT` grants only: no write privileges, not a superuser, no `pg_signal_backend` (or MySQL `PROCESS` / `SUPER` / `CONNECTION_ADMIN`). Without it, read-only mode connects as the application's own role and relies on the classifier and the session's `READ ONLY` transaction alone. On H2 / generic backends there is no enforced read-only transaction, so the classifier is the only control. On Postgres a `READ ONLY` transaction still lets the application role call side-effecting functions such as `pg_terminate_backend()` or `pg_cancel_backend()`. `/capabilities` reports `readOnlyCredentials: false` / `readOnlyEnforced: false` per backend so you can check.
 
 **Read-only sessions:**
 - Postgres: `setReadOnly(true)`, `SET TRANSACTION READ ONLY`, `SET LOCAL statement_timeout` and `lock_timeout`.
@@ -100,6 +105,7 @@ The names are configurable (`accessPermissionBaseName`, `writePermissionName`, `
 - It is conservative. Anything that isn't recognized as a read is treated as a write.
 - A "read" that mentions a mutating keyword is also a write: data-modifying CTEs, `SELECT ... INTO`, `FOR UPDATE`, `nextval()`.
 - Transaction and session control is refused in every mode: `BEGIN`, `COMMIT`, `SET`, `RESET`, `USE`, `PRAGMA x=y`, `ATTACH`, `DO`, and others.
+- On MySQL / MariaDB, comments the server executes are refused in every mode: `/*! ... */`, `/*M! ... */` (version-conditional SQL), and `/*+ ... */` (optimizer hints). `--` only starts a comment when whitespace follows, as in MySQL.
 
 **Clean connections:**
 - Every session ends with a rollback (or a commit for a confirmed write) and restores autocommit and read-only.

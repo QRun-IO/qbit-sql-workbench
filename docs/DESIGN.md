@@ -1,6 +1,6 @@
 # SQL Workbench QBit: design
 
-Status: accepted for 1.0 (owner decisions 2026-10-11). Built against QQQ 4.1.0-RC.1 and Next UI 1.0.0-RC.11.
+Status: accepted for 1.0 (owner decisions 2026-10-11). Built against QQQ 4.1.0-RC.2 and Next UI 1.0.0-RC.11.
 
 SQL Workbench is a super-user SQL notebook for any QQQ application. Users write SQL (and markdown) in notebook cells, run it against any RDBMS backend of the instance, and see typed, paged, exportable results, quick charts, and visual EXPLAIN plans. Sessions are **read-only by default**. A separate permission unlocks a **gated write mode** with per-run confirmation, a dry run, and an affected-row guard. **Every execution is audited.**
 
@@ -174,7 +174,7 @@ The audit table has its insert, edit, and delete capabilities disabled in the QQ
 1. **Authorize.** The session must have `sqlWorkbench.hasAccess` (403 otherwise). Write and EXPLAIN ANALYZE also need `sqlWorkbench.write` and `config.writeModeEnabled`.
 2. **Resolve the target.** The backend must be an `RDBMSBackendMetaData` in the instance and allowed by `allowedBackendNames` / `excludedBackendNames` (404 otherwise). The dialect comes from the vendor.
 3. **Validate.** Check the SQL length (`maxSqlLength`, default 100 KB), then split and classify with `SqlClassifier`. Rules:
-   - `FORBIDDEN` statements are rejected in every mode.
+   - `FORBIDDEN` statements are rejected in every mode. On MySQL this includes any statement with an executable comment (`/*! ... */`, `/*M! ... */`) or optimizer hint (`/*+ ... */`): MySQL runs their contents, so the scanner keeps them as tokens instead of skipping them, and fails closed. MySQL `--` comments need trailing whitespace (`1--1` is arithmetic).
    - Read-only mode allows exactly **one** statement, of kind `READ`.
    - Write mode allows up to `maxStatementsPerRun` (default 50).
    - Every `:param` must have a value. Values are bound through `PreparedStatement`, never spliced into the SQL.
@@ -201,6 +201,8 @@ Per-vendor setup (all of it transaction-scoped, or reverted in `finally`):
 | H2 / generic | `setReadOnly(true)` (a hint only) + classifier | JDBC `setQueryTimeout` | `rollback()`; restore |
 
 There is no session-level `SET` leakage: user SQL can never run `SET` / `RESET` / `USE` / `PRAGMA x=y` / transaction control (all `FORBIDDEN`), and the engine's own settings are `SET LOCAL` or reverted. If any cleanup step fails, the engine calls `connection.abort()` (falling back to `close()`) so a dirty connection is never reused, and logs a warning (without the SQL).
+
+> **Production: configure `readOnlyCredentials` for every target backend.** Use a dedicated database role with `SELECT` grants only: no write privileges, not a superuser, no `pg_signal_backend` (or MySQL `PROCESS` / `SUPER` / `CONNECTION_ADMIN`). Without it, read-only mode connects as the application's own role and relies on the classifier and the session's `READ ONLY` transaction alone. On H2 / generic backends there is no enforced read-only transaction, so the classifier is the only control. On Postgres a `READ ONLY` transaction still lets the application role call side-effecting functions such as `pg_terminate_backend()` or `pg_cancel_backend()`. `/capabilities` reports `readOnlyCredentials: false` / `readOnlyEnforced: false` per backend so you can check.
 
 > **Defense in depth.** The READ ONLY transaction is the primary control on Postgres, MySQL, and SQLite. On H2 the classifier is the only control, so production should use Postgres or MySQL with `readOnlyCredentials` (a role with `SELECT` grants only). A READ ONLY transaction does not stop side-effecting *functions* that are not writes, such as `pg_terminate_backend()` or `pg_sleep()`. Only a least-privilege role does. That is why `readOnlyCredentials` is recommended for production.
 
@@ -274,7 +276,7 @@ The response is `{executionUuid, dialect, analyze, plan: PlanNode, raw: string}`
 
 SQL errors are results, not HTTP errors: `/execute` and `/explain` return 200 with `status` FAILED, TIMED_OUT, or CANCELLED plus `error` and `sqlState`.
 
-All endpoints need an authenticated QQQ session (cookie or Authorization header, via `ExecutorSessionUtils.setupSession`) and `sqlWorkbench.hasAccess`. Errors are `{"error": "..."}` with 400, 401, 403, 404, or 500, through `QJavalinUtils.handleException`. Bodies are JSON. Request and response bodies are never logged.
+All endpoints need an authenticated QQQ session (cookie or Authorization header, via `ExecutorSessionUtils.setupSession`) and `sqlWorkbench.hasAccess`. Errors are `{"error": "..."}` with 400, 401, 403, 404, 409 (a re-used `executionUuid`), or 500, through `QJavalinUtils.handleException`. Execution UUIDs are case-insensitive on every path (`/execute`, `/executions/{uuid}/rows`, `/export`, `/cancel`, snapshots); the server stores and returns them lower-case. Bodies are JSON. Request and response bodies are never logged.
 
 ```yaml
 GET  /capabilities
@@ -286,7 +288,9 @@ GET  /capabilities
 GET  /schema/{backendName}?refresh=bool          -> Schema (see 4.6)
 POST /execute
   body: { backendName, sql, params?: {name: value}, mode?: READ_ONLY|WRITE, notebookId?, cellKey?,
-          pageSize?, confirmToken?, acknowledgeRowGuard? }
+          pageSize?, confirmToken?, acknowledgeRowGuard?,
+          executionUuid? }   # optional client-chosen UUID, so the client can cancel before the response;
+                             # single-use: an id that is running or already audited gets 409
   200 (READ_ONLY / commit): { executionUuid, status, mode, statements: [{index, kind, leadingKeyword, affectedRows?}],
           columns: [Column], rows: [[...]], rowCount, hasMore, truncated, truncatedReason?, durationMs,
           rowsAffected? }
@@ -328,7 +332,7 @@ Visibility rules:
 
 | Concern | Control |
 |---|---|
-| Who | Deny by default. Every endpoint needs `sqlWorkbench.hasAccess` (the app, widget, and table permission base name `sqlWorkbench`, at `HAS_ACCESS_PERMISSION`). Write mode and EXPLAIN ANALYZE need `sqlWorkbench.write`. Publishing to the library needs `sqlWorkbench.share`. The names are configurable. |
+| Who | Deny by default. Every endpoint needs `sqlWorkbench.hasAccess` (the app and widget permission base name `sqlWorkbench`, at `HAS_ACCESS_PERMISSION`). Write mode and EXPLAIN ANALYZE need `sqlWorkbench.write`. Publishing to the library needs `sqlWorkbench.share`. The qbit's tables use a separate base name, `sqlWorkbenchAdmin` (`sqlWorkbenchAdmin.hasAccess`), so only administrators reach them through the generic QQQ table UI / API. The names are configurable. |
 | What can run | Read-only transactions by default (§4.2); classifier as defense in depth; `FORBIDDEN` statements in every mode; one statement per read-only run. |
 | Writes | Separate permission, two-step preview then commit with a server-side single-use token bound to the user, SQL, and backend, a dry run with rollback, a row guard with acknowledgement, a hard cap, a drift check, and a statement timeout. |
 | Credentials | Never returned or logged. Backend metadata goes out only as `{name, label, vendor, dialect}`. `readOnlyCredentials` support `${env.X}` / `${prop.X}` interpolation (`QMetaDataVariableInterpreter`), and the config's `toString` redacts them. |
@@ -336,7 +340,7 @@ Visibility rules:
 | Session and CSRF | QQQ middleware session handling. The cookie session is `HttpOnly`; there is no extra CSRF token, matching the rest of `/qqq/v1` (the JSON-only POSTs need `Content-Type: application/json`, which a cross-site form cannot send without a CORS preflight). The route provider rejects non-JSON POST bodies. |
 | Isolation between users | Result cache, cancellation, history, and write tokens are keyed by the user's `idReference`. Another user's execution UUID returns 404. |
 | QQQ semantics | **Raw SQL bypasses QQQ**: no record security locks, table/field permissions, hidden fields, audit of record changes, or customizers/automations. Rows changed in write mode do **not** trigger QQQ audits, record-change listeners, ESB events, or Quick Search indexing. This is documented in the UI (a banner in write mode) and in the README. Use QQQ processes for business changes. |
-| Personal vs shared | "Personal" is a UX scope, not a confidentiality boundary between super-users. Notebook tables are visible in the QQQ table UI to anyone with `sqlWorkbench.hasAccess`. |
+| Personal vs shared | A personal notebook is visible only to its owner. The five tables need `sqlWorkbenchAdmin.hasAccess`, which ordinary workbench users do not hold, so `/qqq/v1/table/...` cannot read or write other users' notebooks, cells, versions, pinned snapshots, or audit rows. `NotebookService` and the history endpoint check owner / visibility / share permission in code, then read and write as the system user (`SystemUser`), as `ExecutionAuditor` does for the audit. Cells, versions, snapshots, and the audit have insert / edit / delete disabled; only the qbit writes them. Holders of the admin permission see every user's notebooks and the full audit. |
 
 ---
 
@@ -356,6 +360,7 @@ Visibility rules:
 | `accessPermissionBaseName` | `sqlWorkbench` | `<base>.hasAccess` |
 | `writePermissionName` | `sqlWorkbench.write` | |
 | `sharePermissionName` | `sqlWorkbench.share` | |
+| `adminPermissionBaseName` | `sqlWorkbenchAdmin` | `<base>.hasAccess` guards the qbit's tables in the generic table UI / API; must differ from `accessPermissionBaseName` |
 | `statementTimeoutSeconds` | 30 | read-only and EXPLAIN |
 | `writeStatementTimeoutSeconds` | 60 | preview and commit |
 | `maxRows` | 10000 | rows kept per result |

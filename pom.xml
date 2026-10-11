@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright 2026 Kingsrook, LLC
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+   <properties>
+      <revision>1.0.0-SNAPSHOT</revision>
+      <maven.compiler.source>21</maven.compiler.source>
+      <maven.compiler.target>21</maven.compiler.target>
+            <jacoco.version>0.8.15</jacoco.version>
+      <postgres.test.image>postgres:16-alpine</postgres.test.image>
+      <testcontainers.version>1.21.4</testcontainers.version>
+   </properties>
+
+   <parent>
+      <groupId>com.kingsrook</groupId>
+      <artifactId>qbit-build-parent</artifactId>
+      <version>2.0.0</version>
+   </parent>
+
+   <groupId>com.kingsrook.qbits</groupId>
+   <artifactId>qbit-sql-workbench</artifactId>
+   <version>${revision}</version>
+   <packaging>jar</packaging>
+
+   <name>QBit SQL Workbench</name>
+   <description>QBit providing a super-user SQL notebook (read-only by default, gated write mode, audited) over any QQQ RDBMS backend</description>
+   <url>https://github.com/QRun-IO/qbit-sql-workbench</url>
+
+   <modelVersion>4.0.0</modelVersion>
+
+   <licenses>
+      <license>
+         <name>Apache License, Version 2.0</name>
+         <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+         <distribution>repo</distribution>
+      </license>
+   </licenses>
+
+   <developers>
+      <developer>
+         <id>kingsrook</id>
+         <name>Kingsrook Team</name>
+         <email>contact@kingsrook.com</email>
+         <organization>Kingsrook, LLC</organization>
+         <organizationUrl>https://kingsrook.com</organizationUrl>
+      </developer>
+   </developers>
+
+   <scm>
+      <connection>scm:git:git://github.com/QRun-IO/qbit-sql-workbench.git</connection>
+      <developerConnection>scm:git:ssh://github.com:QRun-IO/qbit-sql-workbench.git</developerConnection>
+      <url>https://github.com/QRun-IO/qbit-sql-workbench</url>
+      <tag>HEAD</tag>
+   </scm>
+
+   <dependencies>
+      <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-backend-core</artifactId>
+      </dependency>
+
+      <!-- Connection management and backend meta-data for the RDBMS targets. -->
+      <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-backend-module-rdbms</artifactId>
+      </dependency>
+
+      <!-- The REST routes (/qqq/v1/sql-workbench/*). Hosts that serve QQQ through -->
+      <!-- Javalin already have it; others can still use the engine directly.      -->
+      <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-middleware-javalin</artifactId>
+         <optional>true</optional>
+      </dependency>
+
+      <dependency>
+         <groupId>com.h2database</groupId>
+         <artifactId>h2</artifactId>
+         <version>2.2.220</version>
+         <scope>test</scope>
+      </dependency>
+
+      <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-backend-module-sqlite</artifactId>
+         <scope>test</scope>
+      </dependency>
+
+      <dependency>
+         <groupId>com.kingsrook.qqq</groupId>
+         <artifactId>qqq-backend-module-postgres</artifactId>
+         <scope>test</scope>
+      </dependency>
+
+      <dependency>
+         <groupId>org.junit.jupiter</groupId>
+         <artifactId>junit-jupiter</artifactId>
+         <scope>test</scope>
+      </dependency>
+
+      <dependency>
+         <groupId>org.assertj</groupId>
+         <artifactId>assertj-core</artifactId>
+         <version>3.27.7</version>
+         <scope>test</scope>
+      </dependency>
+
+      <dependency>
+         <groupId>org.mockito</groupId>
+         <artifactId>mockito-core</artifactId>
+         <version>5.8.0</version>
+         <scope>test</scope>
+      </dependency>
+
+      <!-- Testcontainers for the Postgres integration tests -->
+      <dependency>
+         <groupId>org.testcontainers</groupId>
+         <artifactId>testcontainers</artifactId>
+         <version>${testcontainers.version}</version>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>org.testcontainers</groupId>
+         <artifactId>junit-jupiter</artifactId>
+         <version>${testcontainers.version}</version>
+         <scope>test</scope>
+      </dependency>
+      <dependency>
+         <groupId>org.testcontainers</groupId>
+         <artifactId>postgresql</artifactId>
+         <version>${testcontainers.version}</version>
+         <scope>test</scope>
+      </dependency>
+   </dependencies>
+
+   <build>
+      <resources>
+         <resource>
+            <directory>src/main/resources</directory>
+            <filtering>true</filtering>
+            <includes>
+               <include>sql-workbench.properties</include>
+            </includes>
+         </resource>
+         <resource>
+            <directory>src/main/resources</directory>
+            <filtering>false</filtering>
+            <excludes>
+               <exclude>sql-workbench.properties</exclude>
+            </excludes>
+         </resource>
+      </resources>
+      <plugins>
+         <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+               <!-- Exclude integration tests from unit test run -->
+               <excludes>
+                  <exclude>**/*IntegrationTest.java</exclude>
+                  <exclude>**/*IT.java</exclude>
+               </excludes>
+            </configuration>
+         </plugin>
+         <plugin>
+            <!-- Run integration tests with failsafe -->
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <version>3.1.2</version>
+            <configuration>
+               <systemPropertyVariables>
+      <postgres.test.image>postgres:16-alpine</postgres.test.image>
+               </systemPropertyVariables>
+               <includes>
+                  <include>**/*IntegrationTest.java</include>
+                  <include>**/*IT.java</include>
+               </includes>
+            </configuration>
+            <executions>
+               <execution>
+                  <goals>
+                     <goal>integration-test</goal>
+                     <goal>verify</goal>
+                  </goals>
+               </execution>
+            </executions>
+         </plugin>
+         <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>${jacoco.version}</version>
+            <executions>
+               <execution>
+                  <id>prepare-agent</id>
+                  <goals>
+                     <goal>prepare-agent</goal>
+                  </goals>
+               </execution>
+               <execution>
+                  <id>report</id>
+                  <phase>verify</phase>
+                  <goals>
+                     <goal>report</goal>
+                  </goals>
+               </execution>
+               <execution>
+                  <id>check</id>
+                  <goals>
+                     <goal>check</goal>
+                  </goals>
+                  <configuration>
+                     <rules>
+                        <rule>
+                           <element>BUNDLE</element>
+                           <limits>
+                              <limit>
+                                 <counter>INSTRUCTION</counter>
+                                 <value>COVEREDRATIO</value>
+                                 <minimum>0.70</minimum>
+                              </limit>
+                              <limit>
+                                 <counter>CLASS</counter>
+                                 <value>COVEREDRATIO</value>
+                                 <minimum>0.90</minimum>
+                              </limit>
+                           </limits>
+                        </rule>
+                     </rules>
+                  </configuration>
+               </execution>
+            </executions>
+         </plugin>
+      </plugins>
+   </build>
+
+   <profiles>
+      <!-- Built against qqq 4.1 (QBitMetaDataProducer, runtime services, Javalin 7 -->
+      <!-- routes). Until qbit-build-parent 2.1.0 imports the released 4.1 BOM,  -->
+      <!-- this profile is active by default and imports qqq-bom-pom 4.1.0-RC.2  -->
+      <!-- ahead of the parent's 4.0.0 BOM (same as qbit-quick-search, ADR-0007). -->
+      <profile>
+         <id>qqq-snapshot</id>
+         <activation>
+            <activeByDefault>true</activeByDefault>
+         </activation>
+         <properties>
+            <qqq.snapshot.version>4.1.0-RC.2</qqq.snapshot.version>
+         </properties>
+         <dependencyManagement>
+            <dependencies>
+               <dependency>
+                  <groupId>com.kingsrook.qqq</groupId>
+                  <artifactId>qqq-bom-pom</artifactId>
+                  <version>${qqq.snapshot.version}</version>
+                  <type>pom</type>
+                  <scope>import</scope>
+               </dependency>
+            </dependencies>
+         </dependencyManagement>
+         <repositories>
+            <repository>
+               <id>sonatype-snapshots</id>
+               <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+               <releases>
+                  <enabled>false</enabled>
+               </releases>
+               <snapshots>
+                  <enabled>true</enabled>
+               </snapshots>
+            </repository>
+         </repositories>
+      </profile>
+   </profiles>
+</project>
