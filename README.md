@@ -15,7 +15,7 @@ The full design (architecture, data model, security model, limits, API contract,
 
 ## Requirements
 
-- Java 21 and QQQ 4.1 (built against `4.1.0-RC.1`).
+- Java 21 and QQQ 4.1 (built against `4.1.0-RC.2`).
 - `qqq-backend-module-rdbms` for the targets. `qqq-middleware-javalin` for the REST routes; it is optional, and without it the engine still works but no routes are registered.
 - A Next UI release that renders the `SQL_WORKBENCH` widget.
 

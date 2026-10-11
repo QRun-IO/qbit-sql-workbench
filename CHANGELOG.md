@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows Keep
 
 ## [1.0.0] - Unreleased
 
-First release. Requires QQQ 4.1 (built against 4.1.0-RC.1).
+First release. Requires QQQ 4.1 (built against 4.1.0-RC.2).
 
 ### Added
 - `SqlWorkbenchQBitProducer` / `SqlWorkbenchQBitConfig`: a standard QQQ 4.1 QBit, published as `com.kingsrook.qbits:qbit-sql-workbench`.

@@ -1,6 +1,6 @@
 # SQL Workbench QBit: design
 
-Status: accepted for 1.0 (owner decisions 2026-10-11). Built against QQQ 4.1.0-RC.1 and Next UI 1.0.0-RC.11.
+Status: accepted for 1.0 (owner decisions 2026-10-11). Built against QQQ 4.1.0-RC.2 and Next UI 1.0.0-RC.11.
 
 SQL Workbench is a super-user SQL notebook for any QQQ application. Users write SQL (and markdown) in notebook cells, run it against any RDBMS backend of the instance, and see typed, paged, exportable results, quick charts, and visual EXPLAIN plans. Sessions are **read-only by default**. A separate permission unlocks a **gated write mode** with per-run confirmation, a dry run, and an affected-row guard. **Every execution is audited.**
 
