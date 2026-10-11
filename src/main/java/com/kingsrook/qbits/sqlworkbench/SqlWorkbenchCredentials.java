@@ -113,8 +113,9 @@ public class SqlWorkbenchCredentials implements Serializable
 
 
    /*******************************************************************************
-    ** Getter for jdbcUrl
+    ** Getter for jdbcUrl. Ignored by JSON: a URL can carry a password.
     *******************************************************************************/
+   @JsonIgnore
    public String getJdbcUrl()
    {
       return (this.jdbcUrl);

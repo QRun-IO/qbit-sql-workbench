@@ -182,6 +182,13 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       assertThat(config.getReadOnlyCredentials().get("db").toString()).doesNotContain("secret").doesNotContain("ro,");
       assertThat(config.getAccessPermissionName()).isEqualTo("sqlWorkbench.hasAccess");
       assertThat(config.getAdminPermissionName()).isEqualTo("sqlWorkbenchAdmin.hasAccess");
+
+      ////////////////////////////////////////////////////////////////
+      // credentials never serialize - jdbcUrl can carry a password //
+      ////////////////////////////////////////////////////////////////
+      String credentialsJson = com.kingsrook.qqq.backend.core.utils.JsonUtils.toJson(new SqlWorkbenchCredentials()
+         .withUsername("ro").withPassword("secret").withJdbcUrl("jdbc:postgresql://db/app?password=urlsecret"));
+      assertThat(credentialsJson).doesNotContain("secret").doesNotContain("urlsecret").doesNotContain("jdbc:");
       assertThat(config.getAdminPermissionRules().getPermissionBaseName()).isEqualTo("sqlWorkbenchAdmin");
       assertThat(config.getDefaultBackendNameForTables()).isEqualTo("db");
       assertThat(config.applyPrefix("t")).isEqualTo("t");
