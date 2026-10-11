@@ -27,3 +27,10 @@ First release. Requires QQQ 4.1 (built against 4.1.0-RC.1).
   - Pinned result snapshots.
 - REST API under `/qqq/v1/sql-workbench`, with CSV/XLSX/JSON export.
 - PostgreSQL DDL in `docs/ddl/postgres.sql`.
+
+### Security
+- The qbit's tables need a separate admin permission (`adminPermissionBaseName`, default `sqlWorkbenchAdmin` => `sqlWorkbenchAdmin.hasAccess`). Ordinary workbench users have no generic table API access to notebooks, snapshots or the audit; the workbench endpoints check ownership and act as the system user.
+- Client-chosen `executionUuid`s are single-use (409 on reuse) and case-insensitive.
+- On MySQL, executable comments (`/*! */`, `/*M! */`) and optimizer hints (`/*+ */`) are refused.
+- CSV exports neutralize formula injection; connection errors are generic to the caller.
+- Production backends should configure `readOnlyCredentials` (see README, Safety model).

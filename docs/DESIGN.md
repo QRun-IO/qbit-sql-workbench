@@ -202,6 +202,8 @@ Per-vendor setup (all of it transaction-scoped, or reverted in `finally`):
 
 There is no session-level `SET` leakage: user SQL can never run `SET` / `RESET` / `USE` / `PRAGMA x=y` / transaction control (all `FORBIDDEN`), and the engine's own settings are `SET LOCAL` or reverted. If any cleanup step fails, the engine calls `connection.abort()` (falling back to `close()`) so a dirty connection is never reused, and logs a warning (without the SQL).
 
+> **Production: configure `readOnlyCredentials` for every target backend.** Use a dedicated database role with `SELECT` grants only: no write privileges, not a superuser, no `pg_signal_backend` (or MySQL `PROCESS` / `SUPER` / `CONNECTION_ADMIN`). Without it, read-only mode connects as the application's own role and relies on the classifier and the session's `READ ONLY` transaction alone. On H2 / generic backends there is no enforced read-only transaction, so the classifier is the only control. On Postgres a `READ ONLY` transaction still lets the application role call side-effecting functions such as `pg_terminate_backend()` or `pg_cancel_backend()`. `/capabilities` reports `readOnlyCredentials: false` / `readOnlyEnforced: false` per backend so you can check.
+
 > **Defense in depth.** The READ ONLY transaction is the primary control on Postgres, MySQL, and SQLite. On H2 the classifier is the only control, so production should use Postgres or MySQL with `readOnlyCredentials` (a role with `SELECT` grants only). A READ ONLY transaction does not stop side-effecting *functions* that are not writes, such as `pg_terminate_backend()` or `pg_sleep()`. Only a least-privilege role does. That is why `readOnlyCredentials` is recommended for production.
 
 ### 4.3 Write mode
