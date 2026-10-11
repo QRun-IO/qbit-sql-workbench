@@ -37,10 +37,18 @@ import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
 
 /*******************************************************************************
  ** Builds the QTableMetaData of the five SQL Workbench tables. Shared by the
- ** component producers and by tests. All tables are protected by the access
- ** permission (sqlWorkbench.hasAccess); the audit table is read-only for
- ** users (insert / edit / delete capabilities disabled; the engine writes it
- ** as the system user).
+ ** component producers and by tests.
+ **
+ ** All tables are protected by the ADMIN permission
+ ** (sqlWorkbenchAdmin.hasAccess), not the access permission every workbench
+ ** user holds: the generic QQQ table UI / API would otherwise let any user
+ ** read other users' personal notebooks, pinned result data and the full
+ ** execution audit. The workbench endpoints do their own owner / visibility
+ ** checks and then read and write these tables as the system user.
+ **
+ ** Cells, versions, snapshots and the audit are read-only even for admins
+ ** (insert / edit / delete capabilities disabled); only the qbit writes
+ ** them. Notebooks stay editable for admins (e.g. to clean up).
  *******************************************************************************/
 public class SqlWorkbenchTableMetaDataHelper
 {
@@ -65,6 +73,7 @@ public class SqlWorkbenchTableMetaDataHelper
       QTableMetaData table = text(base(config, SqlWorkbenchCell.TABLE_NAME, "SQL Notebook Cell", "notes", SqlWorkbenchCell.class), "content");
       table.setIsHidden(true);
       table.withUniqueKey(new UniqueKey("notebookId", "cellKey"));
+      readOnly(table);
       return (linkNotebook(config, table));
    }
 
@@ -78,6 +87,7 @@ public class SqlWorkbenchTableMetaDataHelper
       QTableMetaData table = text(base(config, SqlWorkbenchNotebookVersion.TABLE_NAME, "SQL Notebook Version", "history", SqlWorkbenchNotebookVersion.class), "contentJson");
       table.setIsHidden(true);
       table.withUniqueKey(new UniqueKey("notebookId", "versionNumber"));
+      readOnly(table);
       return (linkNotebook(config, table));
    }
 
@@ -90,6 +100,7 @@ public class SqlWorkbenchTableMetaDataHelper
    {
       QTableMetaData table = text(base(config, SqlWorkbenchResultSnapshot.TABLE_NAME, "SQL Result Snapshot", "push_pin", SqlWorkbenchResultSnapshot.class), "sqlText", "resultJson");
       table.setIsHidden(true);
+      readOnly(table);
       return (linkNotebook(config, table));
    }
 
@@ -102,7 +113,7 @@ public class SqlWorkbenchTableMetaDataHelper
    {
       QTableMetaData table = text(base(config, SqlWorkbenchExecution.TABLE_NAME, "SQL Execution Audit", "policy", SqlWorkbenchExecution.class), "sqlText", "parametersJson", "errorMessage");
       table.withUniqueKey(new UniqueKey("executionUuid"));
-      table.withoutCapabilities(Capability.TABLE_INSERT, Capability.TABLE_UPDATE, Capability.TABLE_DELETE);
+      readOnly(table);
       table.withRecordLabelFormat("%s %s").withRecordLabelFields("mode", "executionUuid");
       return (table);
    }
@@ -140,9 +151,19 @@ public class SqlWorkbenchTableMetaDataHelper
          .withIcon(new QIcon(icon))
          .withBackendName(config.getBackendName())
          .withPrimaryKeyField("id")
-         .withPermissionRules(config.getAccessPermissionRules())
+         .withPermissionRules(config.getAdminPermissionRules())
          .withFieldsFromEntity(entity);
       return (table);
+   }
+
+
+
+   /*******************************************************************************
+    ** Only the qbit (as the system user) writes this table.
+    *******************************************************************************/
+   private static void readOnly(QTableMetaData table)
+   {
+      table.withoutCapabilities(Capability.TABLE_INSERT, Capability.TABLE_UPDATE, Capability.TABLE_DELETE);
    }
 
 

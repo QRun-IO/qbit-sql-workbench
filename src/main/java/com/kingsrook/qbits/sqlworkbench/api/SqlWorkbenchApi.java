@@ -20,6 +20,7 @@ package com.kingsrook.qbits.sqlworkbench.api;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -39,6 +40,7 @@ import com.kingsrook.qqq.backend.core.utils.StringUtils;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitProducer;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
+import com.kingsrook.qbits.sqlworkbench.SystemUser;
 import com.kingsrook.qbits.sqlworkbench.engine.Caller;
 import com.kingsrook.qbits.sqlworkbench.engine.ColumnInfo;
 import com.kingsrook.qbits.sqlworkbench.engine.ExecutionRequest;
@@ -188,7 +190,7 @@ public class SqlWorkbenchApi
          intOrNull(body.get("pageSize")),
          body.get("confirmToken") == null ? null : body.get("confirmToken").toString(),
          Boolean.TRUE.equals(body.get("acknowledgeRowGuard")),
-         body.get("executionUuid") == null ? null : body.get("executionUuid").toString());
+         body.get("executionUuid") == null ? null : normalizeUuid(body.get("executionUuid").toString()));
       return (engine.execute(request, caller));
    }
 
@@ -209,12 +211,13 @@ public class SqlWorkbenchApi
     *******************************************************************************/
    public Map<String, Object> rows(Caller caller, String executionUuid, Integer offset, Integer limit, Integer sortColumn, String direction) throws QException
    {
-      ResultCache.Entry entry = cached(caller, executionUuid);
+      String            uuid  = normalizeUuid(executionUuid);
+      ResultCache.Entry entry = cached(caller, uuid);
       int from = offset == null ? 0 : Math.max(0, offset);
       int size = limit == null || limit <= 0 ? config.getDefaultPageSize() : Math.min(limit, config.getMaxPageSize());
 
       Map<String, Object> body = new LinkedHashMap<>();
-      body.put("executionUuid", executionUuid);
+      body.put("executionUuid", uuid);
       body.put("columns", entry.result().columns().stream().map(ColumnInfo::toMap).toList());
       body.put("rows", ResultCache.page(entry.result(), from, size, sortColumn, "desc".equalsIgnoreCase(direction)));
       body.put("offset", from);
@@ -231,7 +234,7 @@ public class SqlWorkbenchApi
     *******************************************************************************/
    public ResultCache.Entry exportable(Caller caller, String executionUuid) throws QException
    {
-      return (cached(caller, executionUuid));
+      return (cached(caller, normalizeUuid(executionUuid)));
    }
 
 
@@ -241,7 +244,7 @@ public class SqlWorkbenchApi
     *******************************************************************************/
    public Map<String, Object> cancel(Caller caller, String executionUuid)
    {
-      return (Map.of("cancelled", engine.cancel(executionUuid, caller)));
+      return (Map.of("cancelled", engine.cancel(normalizeUuid(executionUuid), caller)));
    }
 
 
@@ -260,7 +263,11 @@ public class SqlWorkbenchApi
       }
 
       List<Map<String, Object>> executions = new ArrayList<>();
-      for(QRecord record : QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME), filter))
+      //////////////////////////////////////////////////////////////////////
+      // the audit table needs the admin permission; the filter above is //
+      // the boundary (own rows only), so read it as the system user     //
+      //////////////////////////////////////////////////////////////////////
+      for(QRecord record : SystemUser.call(() -> QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME), filter)))
       {
          SqlWorkbenchExecution execution = new SqlWorkbenchExecution(record);
          Map<String, Object>   view      = new LinkedHashMap<>();
@@ -298,12 +305,17 @@ public class SqlWorkbenchApi
     *******************************************************************************/
    public Map<String, Object> createSnapshot(Caller caller, Integer notebookId, Map<String, Object> body) throws QException
    {
-      String executionUuid = requireString(body, "executionUuid");
+      String executionUuid = normalizeUuid(requireString(body, "executionUuid"));
       cached(caller, executionUuid);
-      List<QRecord> audit = QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME),
-         new QQueryFilter(new QFilterCriteria("executionUuid", QCriteriaOperator.EQUALS, executionUuid)).withLimit(1));
+      List<QRecord> audit = SystemUser.call(() -> QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME),
+         new QQueryFilter(new QFilterCriteria("executionUuid", QCriteriaOperator.EQUALS, executionUuid))
+            .withCriteria(new QFilterCriteria("userId", QCriteriaOperator.EQUALS, caller.userId()))
+            .withLimit(1)));
       String sqlText = audit.isEmpty() ? null : audit.get(0).getValueString("sqlText");
-      return (notebooks.createSnapshot(notebookId, body, caller, sqlText));
+
+      Map<String, Object> normalized = new LinkedHashMap<>(body);
+      normalized.put("executionUuid", executionUuid);
+      return (notebooks.createSnapshot(notebookId, normalized, caller, sqlText));
    }
 
 
@@ -315,6 +327,17 @@ public class SqlWorkbenchApi
    {
       return (runtime.getResultCache().get(executionUuid, caller.userId())
          .orElseThrow(() -> new QNotFoundException("That result is no longer available; run the SQL again.")));
+   }
+
+
+
+   /*******************************************************************************
+    ** Execution ids are stored and cached lower-case; accept any case (and
+    ** surrounding blanks) from clients.
+    *******************************************************************************/
+   static String normalizeUuid(String executionUuid)
+   {
+      return (executionUuid == null ? null : executionUuid.trim().toLowerCase(Locale.ROOT));
    }
 
 

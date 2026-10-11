@@ -64,7 +64,11 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
          assertThat(table).as(name).isNotNull();
          assertThat(table.getBackendName()).isEqualTo(BACKEND_NAME);
          assertThat(table.getPermissionRules().getLevel()).isEqualTo(PermissionLevel.HAS_ACCESS_PERMISSION);
-         assertThat(table.getPermissionRules().getPermissionBaseName()).isEqualTo("sqlWorkbench");
+         assertThat(table.getPermissionRules().getPermissionBaseName()).as("tables need the admin permission, not plain access").isEqualTo("sqlWorkbenchAdmin");
+         boolean writable = name.equals("sqlWorkbenchNotebook");
+         assertThat(table.isCapabilityEnabled(qInstance.getBackend(BACKEND_NAME), com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_INSERT)).as(name).isEqualTo(writable);
+         assertThat(table.isCapabilityEnabled(qInstance.getBackend(BACKEND_NAME), com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_UPDATE)).as(name).isEqualTo(writable);
+         assertThat(table.isCapabilityEnabled(qInstance.getBackend(BACKEND_NAME), com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_DELETE)).as(name).isEqualTo(writable);
          assertThat(((RDBMSTableBackendDetails) table.getBackendDetails()).getTableName()).startsWith("sql_workbench_");
          assertThat(table.getSourceQBitName()).isNotBlank();
       }
@@ -152,6 +156,10 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
          .anyMatch(e -> e.contains("maxRows")).anyMatch(e -> e.contains("writePermissionName")).anyMatch(e -> e.contains("defaultPageSize must not exceed"));
       assertThat(errors(new SqlWorkbenchQBitConfig().withBackendName("db").withMaxAffectedRowsWithoutAcknowledgement(10).withMaxAffectedRows(5), instance))
          .anyMatch(e -> e.contains("maxAffectedRowsWithoutAcknowledgement must not exceed"));
+      assertThat(errors(new SqlWorkbenchQBitConfig().withBackendName("db").withAdminPermissionBaseName("sqlWorkbench"), instance))
+         .anyMatch(e -> e.contains("adminPermissionBaseName must differ"));
+      assertThat(errors(new SqlWorkbenchQBitConfig().withBackendName("db").withAdminPermissionBaseName(""), instance))
+         .anyMatch(e -> e.contains("adminPermissionBaseName is required"));
 
       QInstance bad = new QInstance();
       bad.addBackend(defineH2Backend("db"));
@@ -173,6 +181,8 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       assertThat(config.toString()).doesNotContain("secret").doesNotContain("ro\"").contains("db");
       assertThat(config.getReadOnlyCredentials().get("db").toString()).doesNotContain("secret").doesNotContain("ro,");
       assertThat(config.getAccessPermissionName()).isEqualTo("sqlWorkbench.hasAccess");
+      assertThat(config.getAdminPermissionName()).isEqualTo("sqlWorkbenchAdmin.hasAccess");
+      assertThat(config.getAdminPermissionRules().getPermissionBaseName()).isEqualTo("sqlWorkbenchAdmin");
       assertThat(config.getDefaultBackendNameForTables()).isEqualTo("db");
       assertThat(config.applyPrefix("t")).isEqualTo("t");
       assertThat(config.withTableNamePrefix("p").applyPrefix("t")).isEqualTo("p_t");

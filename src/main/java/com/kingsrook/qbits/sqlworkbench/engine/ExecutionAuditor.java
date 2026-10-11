@@ -22,16 +22,13 @@ import java.time.Instant;
 import java.util.List;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.UpdateAction;
-import com.kingsrook.qqq.backend.core.context.CapturedContext;
-import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertOutput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
-import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
-import com.kingsrook.qqq.backend.core.model.session.QSystemUserSession;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
+import com.kingsrook.qbits.sqlworkbench.SystemUser;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
 
 
@@ -153,39 +150,9 @@ public class ExecutionAuditor
    /*******************************************************************************
     ** Run as the system user, in the current instance.
     *******************************************************************************/
-   static void asSystem(QContextRunnable runnable) throws QException
+   static void asSystem(SystemUser.Block block) throws QException
    {
-      QInstance qInstance = QContext.getQInstance();
-      QException[] thrown = new QException[1];
-      QContext.withTemporaryContext(new CapturedContext(qInstance, new QSystemUserSession()), () ->
-      {
-         try
-         {
-            runnable.run();
-         }
-         catch(QException e)
-         {
-            thrown[0] = e;
-         }
-      });
-      if(thrown[0] != null)
-      {
-         throw (thrown[0]);
-      }
-   }
-
-
-
-   /*******************************************************************************
-    ** A block that may throw QException.
-    *******************************************************************************/
-   @FunctionalInterface
-   public interface QContextRunnable
-   {
-      /*******************************************************************************
-       **
-       *******************************************************************************/
-      void run() throws QException;
+      SystemUser.run(block);
    }
 
 }

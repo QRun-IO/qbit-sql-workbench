@@ -329,7 +329,7 @@ Visibility rules:
 
 | Concern | Control |
 |---|---|
-| Who | Deny by default. Every endpoint needs `sqlWorkbench.hasAccess` (the app, widget, and table permission base name `sqlWorkbench`, at `HAS_ACCESS_PERMISSION`). Write mode and EXPLAIN ANALYZE need `sqlWorkbench.write`. Publishing to the library needs `sqlWorkbench.share`. The names are configurable. |
+| Who | Deny by default. Every endpoint needs `sqlWorkbench.hasAccess` (the app and widget permission base name `sqlWorkbench`, at `HAS_ACCESS_PERMISSION`). Write mode and EXPLAIN ANALYZE need `sqlWorkbench.write`. Publishing to the library needs `sqlWorkbench.share`. The qbit's tables use a separate base name, `sqlWorkbenchAdmin` (`sqlWorkbenchAdmin.hasAccess`), so only administrators reach them through the generic QQQ table UI / API. The names are configurable. |
 | What can run | Read-only transactions by default (§4.2); classifier as defense in depth; `FORBIDDEN` statements in every mode; one statement per read-only run. |
 | Writes | Separate permission, two-step preview then commit with a server-side single-use token bound to the user, SQL, and backend, a dry run with rollback, a row guard with acknowledgement, a hard cap, a drift check, and a statement timeout. |
 | Credentials | Never returned or logged. Backend metadata goes out only as `{name, label, vendor, dialect}`. `readOnlyCredentials` support `${env.X}` / `${prop.X}` interpolation (`QMetaDataVariableInterpreter`), and the config's `toString` redacts them. |
@@ -337,7 +337,7 @@ Visibility rules:
 | Session and CSRF | QQQ middleware session handling. The cookie session is `HttpOnly`; there is no extra CSRF token, matching the rest of `/qqq/v1` (the JSON-only POSTs need `Content-Type: application/json`, which a cross-site form cannot send without a CORS preflight). The route provider rejects non-JSON POST bodies. |
 | Isolation between users | Result cache, cancellation, history, and write tokens are keyed by the user's `idReference`. Another user's execution UUID returns 404. |
 | QQQ semantics | **Raw SQL bypasses QQQ**: no record security locks, table/field permissions, hidden fields, audit of record changes, or customizers/automations. Rows changed in write mode do **not** trigger QQQ audits, record-change listeners, ESB events, or Quick Search indexing. This is documented in the UI (a banner in write mode) and in the README. Use QQQ processes for business changes. |
-| Personal vs shared | "Personal" is a UX scope, not a confidentiality boundary between super-users. Notebook tables are visible in the QQQ table UI to anyone with `sqlWorkbench.hasAccess`. |
+| Personal vs shared | A personal notebook is visible only to its owner. The five tables need `sqlWorkbenchAdmin.hasAccess`, which ordinary workbench users do not hold, so `/qqq/v1/table/...` cannot read or write other users' notebooks, cells, versions, pinned snapshots, or audit rows. `NotebookService` and the history endpoint check owner / visibility / share permission in code, then read and write as the system user (`SystemUser`), as `ExecutionAuditor` does for the audit. Cells, versions, snapshots, and the audit have insert / edit / delete disabled; only the qbit writes them. Holders of the admin permission see every user's notebooks and the full audit. |
 
 ---
 
@@ -357,6 +357,7 @@ Visibility rules:
 | `accessPermissionBaseName` | `sqlWorkbench` | `<base>.hasAccess` |
 | `writePermissionName` | `sqlWorkbench.write` | |
 | `sharePermissionName` | `sqlWorkbench.share` | |
+| `adminPermissionBaseName` | `sqlWorkbenchAdmin` | `<base>.hasAccess` guards the qbit's tables in the generic table UI / API; must differ from `accessPermissionBaseName` |
 | `statementTimeoutSeconds` | 30 | read-only and EXPLAIN |
 | `writeStatementTimeoutSeconds` | 60 | preview and commit |
 | `maxRows` | 10000 | rows kept per result |

@@ -46,6 +46,7 @@ import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
+import com.kingsrook.qbits.sqlworkbench.SystemUser;
 import com.kingsrook.qbits.sqlworkbench.explain.PlanNode;
 import com.kingsrook.qbits.sqlworkbench.explain.PlanParser;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
@@ -708,14 +709,14 @@ public class SqlExecutionEngine
     *******************************************************************************/
    private static class Deferred
    {
-      private ExecutionAuditor.QContextRunnable action;
+      private SystemUser.Block action;
 
 
 
       /*******************************************************************************
        **
        *******************************************************************************/
-      void set(ExecutionAuditor.QContextRunnable action)
+      void set(SystemUser.Block action)
       {
          this.action = action;
       }

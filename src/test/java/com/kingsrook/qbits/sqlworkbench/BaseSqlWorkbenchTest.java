@@ -55,6 +55,7 @@ public class BaseSqlWorkbenchTest
    public static final String READER       = "reader-1";
    public static final String WRITER       = "writer-1";
    public static final String OTHER_READER = "reader-2";
+   public static final String ADMIN        = "admin-1";
 
    protected QInstance              qInstance;
    protected SqlWorkbenchQBitConfig config;
@@ -224,8 +225,9 @@ public class BaseSqlWorkbenchTest
 
    /*******************************************************************************
     ** Grants permissions by the session id's prefix: "writer-*" gets access,
-    ** write and share; "reader-*" gets access; anything else nothing. The user
-    ** id is the session id.
+    ** write and share; "reader-*" gets access; "admin-*" gets access and the
+    ** admin permission (the generic table UI / API); anything else nothing.
+    ** The user id is the session id.
     *******************************************************************************/
    public static class TestSessionCustomizer implements com.kingsrook.qqq.backend.core.modules.authentication.QAuthenticationModuleCustomizerInterface
    {
@@ -249,9 +251,13 @@ public class BaseSqlWorkbenchTest
       {
          QSession session = new QSession().withUser(new QUser().withIdReference(userId).withFullName("Name of " + userId));
          session.setPermissions(new java.util.HashSet<>());
-         if(userId != null && (userId.startsWith("reader") || userId.startsWith("writer")))
+         if(userId != null && (userId.startsWith("reader") || userId.startsWith("writer") || userId.startsWith("admin")))
          {
             session.withPermission(SqlWorkbenchQBitConfig.DEFAULT_ACCESS_PERMISSION_BASE_NAME + ".hasAccess");
+         }
+         if(userId != null && userId.startsWith("admin"))
+         {
+            session.withPermission(SqlWorkbenchQBitConfig.DEFAULT_ADMIN_PERMISSION_BASE_NAME + ".hasAccess");
          }
          if(userId != null && userId.startsWith("writer"))
          {

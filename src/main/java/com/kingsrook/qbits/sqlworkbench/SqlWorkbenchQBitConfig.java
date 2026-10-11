@@ -41,7 +41,9 @@ import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaDat
  ** excludedBackendNames over the instance's RDBMS backends, optional
  ** readOnlyCredentials / writeCredentials per backend, and
  ** useBackendReadOnlyReplica. Permissions: accessPermissionBaseName
- ** (=> "sqlWorkbench.hasAccess"), writePermissionName, sharePermissionName.
+ ** (=> "sqlWorkbench.hasAccess"), writePermissionName, sharePermissionName,
+ ** and adminPermissionBaseName (=> "sqlWorkbenchAdmin.hasAccess"), which
+ ** alone grants the generic QQQ table UI / API over the qbit's tables.
  ** Limits: timeouts, rows, bytes, statement counts, row guard, caches.
  **
  ** validate() is list-based and never throws; the producer fails production
@@ -52,6 +54,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    public static final String DEFAULT_ACCESS_PERMISSION_BASE_NAME = "sqlWorkbench";
    public static final String DEFAULT_WRITE_PERMISSION_NAME       = "sqlWorkbench.write";
    public static final String DEFAULT_SHARE_PERMISSION_NAME       = "sqlWorkbench.share";
+   public static final String DEFAULT_ADMIN_PERMISSION_BASE_NAME  = "sqlWorkbenchAdmin";
 
    private String backendName;
    private String tableNamePrefix;
@@ -64,6 +67,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    private String accessPermissionBaseName = DEFAULT_ACCESS_PERMISSION_BASE_NAME;
    private String writePermissionName = DEFAULT_WRITE_PERMISSION_NAME;
    private String sharePermissionName = DEFAULT_SHARE_PERMISSION_NAME;
+   private String adminPermissionBaseName = DEFAULT_ADMIN_PERMISSION_BASE_NAME;
    private Integer statementTimeoutSeconds = 30;
    private Integer writeStatementTimeoutSeconds = 60;
    private Integer maxRows = 10_000;
@@ -138,18 +142,23 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
          }
       }
 
-      for(String name : List.of("accessPermissionBaseName", "writePermissionName", "sharePermissionName"))
+      for(String name : List.of("accessPermissionBaseName", "writePermissionName", "sharePermissionName", "adminPermissionBaseName"))
       {
          String value = switch(name)
          {
             case "accessPermissionBaseName" -> accessPermissionBaseName;
             case "writePermissionName" -> writePermissionName;
+            case "adminPermissionBaseName" -> adminPermissionBaseName;
             default -> sharePermissionName;
          };
          if(!StringUtils.hasContent(value))
          {
             errors.add(name + " is required");
          }
+      }
+      if(StringUtils.hasContent(adminPermissionBaseName) && adminPermissionBaseName.equals(accessPermissionBaseName))
+      {
+         errors.add("adminPermissionBaseName must differ from accessPermissionBaseName (it guards other users' notebooks and the audit)");
       }
 
       requirePositive(errors, "statementTimeoutSeconds", statementTimeoutSeconds);
@@ -230,13 +239,40 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
 
 
    /*******************************************************************************
-    ** Permission rules for the app, widget and tables: has-access on the
-    ** configured base name.
+    ** Permission rules for the app and widget: has-access on the configured
+    ** base name. (The tables use getAdminPermissionRules.)
     *******************************************************************************/
    @JsonIgnore
    public QPermissionRules getAccessPermissionRules()
    {
       return (new QPermissionRules().withLevel(PermissionLevel.HAS_ACCESS_PERMISSION).withPermissionBaseName(accessPermissionBaseName));
+   }
+
+
+
+   /*******************************************************************************
+    ** The admin permission: the admin base name plus ".hasAccess".
+    *******************************************************************************/
+   @JsonIgnore
+   public String getAdminPermissionName()
+   {
+      return (adminPermissionBaseName + ".hasAccess");
+   }
+
+
+
+   /*******************************************************************************
+    ** Permission rules for the qbit's tables: has-access on the admin base
+    ** name. Ordinary workbench users do not hold it, so the generic QQQ table
+    ** UI / API (/qqq/v1/table/...) cannot read other users' notebooks,
+    ** snapshots or the execution audit; the workbench's own endpoints read
+    ** and write these tables as the system user after their own owner /
+    ** visibility checks.
+    *******************************************************************************/
+   @JsonIgnore
+   public QPermissionRules getAdminPermissionRules()
+   {
+      return (new QPermissionRules().withLevel(PermissionLevel.HAS_ACCESS_PERMISSION).withPermissionBaseName(adminPermissionBaseName));
    }
 
 
@@ -644,6 +680,37 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    public SqlWorkbenchQBitConfig withSharePermissionName(String sharePermissionName)
    {
       this.sharePermissionName = sharePermissionName;
+      return (this);
+   }
+
+
+
+   /*******************************************************************************
+    ** Getter for adminPermissionBaseName
+    *******************************************************************************/
+   public String getAdminPermissionBaseName()
+   {
+      return (this.adminPermissionBaseName);
+   }
+
+
+
+   /*******************************************************************************
+    ** Setter for adminPermissionBaseName
+    *******************************************************************************/
+   public void setAdminPermissionBaseName(String adminPermissionBaseName)
+   {
+      this.adminPermissionBaseName = adminPermissionBaseName;
+   }
+
+
+
+   /*******************************************************************************
+    ** Fluent setter for adminPermissionBaseName
+    *******************************************************************************/
+   public SqlWorkbenchQBitConfig withAdminPermissionBaseName(String adminPermissionBaseName)
+   {
+      this.adminPermissionBaseName = adminPermissionBaseName;
       return (this);
    }
 
