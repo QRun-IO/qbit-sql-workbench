@@ -103,6 +103,7 @@ Grant `sqlWorkbenchAdmin.hasAccess` only to administrators or auditors. Ordinary
 - It is conservative. Anything that isn't recognized as a read is treated as a write.
 - A "read" that mentions a mutating keyword is also a write: data-modifying CTEs, `SELECT ... INTO`, `FOR UPDATE`, `nextval()`.
 - Transaction and session control is refused in every mode: `BEGIN`, `COMMIT`, `SET`, `RESET`, `USE`, `PRAGMA x=y`, `ATTACH`, `DO`, and others.
+- On MySQL / MariaDB, comments the server executes are refused in every mode: `/*! ... */`, `/*M! ... */` (version-conditional SQL), and `/*+ ... */` (optimizer hints). `--` only starts a comment when whitespace follows, as in MySQL.
 
 **Clean connections:**
 - Every session ends with a rollback (or a commit for a confirmed write) and restores autocommit and read-only.

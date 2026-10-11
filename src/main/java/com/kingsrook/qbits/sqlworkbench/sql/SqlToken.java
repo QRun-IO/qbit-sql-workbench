@@ -45,7 +45,14 @@ public record SqlToken(Type type, String text, int start, int end)
       SEMICOLON,
       OPEN_PAREN,
       CLOSE_PAREN,
-      SYMBOL
+      SYMBOL,
+
+      /////////////////////////////////////////////////////////////////////
+      // a MySQL / MariaDB comment the server executes: /*! ... */,      //
+      // /*M! ... */ (version-conditional SQL) or /*+ ... */ (optimizer  //
+      // hints). Its contents are SQL, so it is a token, not a comment.  //
+      /////////////////////////////////////////////////////////////////////
+      EXECUTABLE_COMMENT
    }
 
 

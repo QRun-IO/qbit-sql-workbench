@@ -112,6 +112,62 @@ class SqlClassifierTest
 
 
    /*******************************************************************************
+    ** MySQL runs /*! ... *\/ (and MariaDB /*M! ... *\/) as SQL and reads
+    ** optimizer hints from /*+ ... *\/: on MySQL these fail closed.
+    *******************************************************************************/
+   @ParameterizedTest
+   @CsvSource(delimiter = '|', quoteCharacter = '~', value = {
+      "SELECT * FROM t /*! INTO OUTFILE '/tmp/x' */",
+      "SELECT * FROM t /*!50000 INTO OUTFILE '/tmp/x' */",
+      "SELECT * FROM t /*M! INTO OUTFILE '/tmp/x' */",
+      "/*! DROP TABLE t */",
+      "SELECT /*+ MAX_EXECUTION_TIME(1) */ * FROM t",
+      "SELECT /*+ SET_VAR(sql_mode='') */ 1",
+      "SELECT 1 /*!",
+   })
+   void testMysqlExecutableCommentsAreForbidden(String sql)
+   {
+      List<SqlStatement> statements = SqlClassifier.split(sql, SqlDialect.MYSQL);
+      assertThat(statements).hasSize(1);
+      assertThat(statements.get(0).kind()).isEqualTo(StatementKind.FORBIDDEN);
+      assertThat(statements.get(0).reason()).contains("executable comments");
+   }
+
+
+
+   /*******************************************************************************
+    ** Plain comments stay comments; the executable forms only matter on
+    ** MySQL; inside literals they are text.
+    *******************************************************************************/
+   @Test
+   void testMysqlPlainCommentsAndOtherDialects()
+   {
+      assertThat(kindOf("SELECT 1 /* INTO OUTFILE */", SqlDialect.MYSQL)).isEqualTo(StatementKind.READ);
+      assertThat(kindOf("SELECT '/*! INTO OUTFILE */' AS s", SqlDialect.MYSQL)).isEqualTo(StatementKind.READ);
+      assertThat(kindOf("SELECT `/*!x*/` FROM t", SqlDialect.MYSQL)).isEqualTo(StatementKind.READ);
+      assertThat(kindOf("SELECT 1 /*! INTO OUTFILE */", SqlDialect.POSTGRES)).isEqualTo(StatementKind.READ);
+      assertThat(kindOf("SELECT 1 /*+ hint */", SqlDialect.H2)).isEqualTo(StatementKind.READ);
+   }
+
+
+
+   /*******************************************************************************
+    ** MySQL only treats "--" as a comment when whitespace follows; "1--1" is
+    ** arithmetic, so what follows it is still SQL.
+    *******************************************************************************/
+   @Test
+   void testMysqlDashDashNeedsWhitespace()
+   {
+      assertThat(kindOf("SELECT * FROM t WHERE a=1--1 INTO OUTFILE '/tmp/x'", SqlDialect.MYSQL)).isEqualTo(StatementKind.WRITE);
+      assertThat(kindOf("SELECT 1 -- INTO OUTFILE", SqlDialect.MYSQL)).isEqualTo(StatementKind.READ);
+      assertThat(kindOf("SELECT 1 --\tINTO", SqlDialect.MYSQL)).isEqualTo(StatementKind.READ);
+      assertThat(kindOf("SELECT 1 --", SqlDialect.MYSQL)).isEqualTo(StatementKind.READ);
+      assertThat(kindOf("SELECT 1 --INTO x", SqlDialect.POSTGRES)).isEqualTo(StatementKind.READ);
+   }
+
+
+
+   /*******************************************************************************
     **
     *******************************************************************************/
    @Test

@@ -30,6 +30,13 @@ import java.util.List;
  **
  ** Unterminated literals and comments run to the end of the text (the
  ** database reports the syntax error); the scanner never throws.
+ **
+ ** MySQL executes some "comments": /*!... and /*M!... comments run their
+ ** contents as SQL, and /*+... carries optimizer hints. On the MySQL
+ ** dialect these become EXECUTABLE_COMMENT tokens (which the classifier
+ ** forbids) instead of being skipped. MySQL also needs whitespace after
+ ** "--" for a line comment ("1--1" is arithmetic), so on MySQL "--"
+ ** followed by anything else is scanned as symbols.
  *******************************************************************************/
 public class SqlScanner
 {
@@ -77,13 +84,19 @@ public class SqlScanner
          {
             pos++;
          }
-         else if(c == '-' && peek(1) == '-')
+         else if(c == '-' && peek(1) == '-' && isDashCommentStart())
          {
             skipLineComment();
          }
          else if(c == '#' && dialect.isHashComments())
          {
             skipLineComment();
+         }
+         else if(c == '/' && peek(1) == '*' && isExecutableCommentStart())
+         {
+            int start = pos;
+            skipBlockComment();
+            tokens.add(new SqlToken(SqlToken.Type.EXECUTABLE_COMMENT, sql.substring(start, pos), start, pos));
          }
          else if(c == '/' && peek(1) == '*')
          {
@@ -188,6 +201,37 @@ public class SqlScanner
    {
       int i = pos + offset;
       return (i < length ? sql.charAt(i) : '\0');
+   }
+
+
+
+   /*******************************************************************************
+    ** At "--": a line comment everywhere but MySQL, where the dashes must be
+    ** followed by whitespace, a control character, or the end of the text.
+    *******************************************************************************/
+   private boolean isDashCommentStart()
+   {
+      if(dialect != SqlDialect.MYSQL)
+      {
+         return (true);
+      }
+      char next = peek(2);
+      return (next == '\0' || Character.isWhitespace(next) || Character.isISOControl(next));
+   }
+
+
+
+   /*******************************************************************************
+    ** At "/*" on MySQL: /*!, /*M! or /*+, which the server executes.
+    *******************************************************************************/
+   private boolean isExecutableCommentStart()
+   {
+      if(dialect != SqlDialect.MYSQL)
+      {
+         return (false);
+      }
+      char third = peek(2);
+      return (third == '!' || third == '+' || (third == 'M' && peek(3) == '!'));
    }
 
 

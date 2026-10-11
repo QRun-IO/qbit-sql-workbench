@@ -97,6 +97,16 @@ public class SqlClassifier
     *******************************************************************************/
    static SqlStatement classify(String text, List<SqlToken> tokens)
    {
+      //////////////////////////////////////////////////////////////////////
+      // MySQL executes /*! ... */ and /*+ ... */: fail closed, whatever //
+      // the rest of the statement looks like                            //
+      //////////////////////////////////////////////////////////////////////
+      if(tokens.stream().anyMatch(t -> t.type() == SqlToken.Type.EXECUTABLE_COMMENT))
+      {
+         return (new SqlStatement(text, tokens, StatementKind.FORBIDDEN, null,
+            "MySQL executable comments (/*! ... */, /*M! ... */) and optimizer hints (/*+ ... */) run as SQL; remove them"));
+      }
+
       ////////////////////////////////////////////////////////
       // skip leading parens, as in "(SELECT ...) UNION ..." //
       ////////////////////////////////////////////////////////

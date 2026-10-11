@@ -174,7 +174,7 @@ The audit table has its insert, edit, and delete capabilities disabled in the QQ
 1. **Authorize.** The session must have `sqlWorkbench.hasAccess` (403 otherwise). Write and EXPLAIN ANALYZE also need `sqlWorkbench.write` and `config.writeModeEnabled`.
 2. **Resolve the target.** The backend must be an `RDBMSBackendMetaData` in the instance and allowed by `allowedBackendNames` / `excludedBackendNames` (404 otherwise). The dialect comes from the vendor.
 3. **Validate.** Check the SQL length (`maxSqlLength`, default 100 KB), then split and classify with `SqlClassifier`. Rules:
-   - `FORBIDDEN` statements are rejected in every mode.
+   - `FORBIDDEN` statements are rejected in every mode. On MySQL this includes any statement with an executable comment (`/*! ... */`, `/*M! ... */`) or optimizer hint (`/*+ ... */`): MySQL runs their contents, so the scanner keeps them as tokens instead of skipping them, and fails closed. MySQL `--` comments need trailing whitespace (`1--1` is arithmetic).
    - Read-only mode allows exactly **one** statement, of kind `READ`.
    - Write mode allows up to `maxStatementsPerRun` (default 50).
    - Every `:param` must have a value. Values are bound through `PreparedStatement`, never spliced into the SQL.
