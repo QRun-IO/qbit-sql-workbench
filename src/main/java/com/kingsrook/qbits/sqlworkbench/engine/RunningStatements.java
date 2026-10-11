@@ -86,29 +86,49 @@ public class RunningStatements
 
    /*******************************************************************************
     ** Register an execution, unless the user already has maxPerUser running.
+    ** An id that is already registered is refused (never overwritten), so a
+    ** re-sent id cannot replace - and later unregister - the original run.
     **
     ** @return the registration, or null when the user is at the limit
+    ** @throws DuplicateExecutionException when the id is already running
     *******************************************************************************/
-   public synchronized Running register(String executionUuid, String userId, int maxPerUser)
+   public synchronized Running register(String executionUuid, String userId, int maxPerUser) throws DuplicateExecutionException
    {
+      if(running.containsKey(executionUuid))
+      {
+         throw (new DuplicateExecutionException(executionUuid));
+      }
       long mine = running.values().stream().filter(r -> Objects.equals(r.userId, userId)).count();
       if(mine >= maxPerUser)
       {
          return (null);
       }
       Running registration = new Running(userId);
-      running.put(executionUuid, registration);
+      if(running.putIfAbsent(executionUuid, registration) != null)
+      {
+         throw (new DuplicateExecutionException(executionUuid));
+      }
       return (registration);
    }
 
 
 
    /*******************************************************************************
-    **
+    ** Remove this registration - only if it is still the one under the id.
     *******************************************************************************/
-   public void unregister(String executionUuid)
+   public void unregister(String executionUuid, Running registration)
    {
-      running.remove(executionUuid);
+      running.remove(executionUuid, registration);
+   }
+
+
+
+   /*******************************************************************************
+    ** Whether an execution with this id is in flight.
+    *******************************************************************************/
+   public boolean isRunning(String executionUuid)
+   {
+      return (executionUuid != null && running.containsKey(executionUuid));
    }
 
 

@@ -22,7 +22,12 @@ import java.time.Instant;
 import java.util.List;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.UpdateAction;
+import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.logging.QLogger;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertOutput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
@@ -30,6 +35,7 @@ import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.SystemUser;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
+import static com.kingsrook.qqq.backend.core.logging.LogUtils.logPair;
 
 
 /*******************************************************************************
@@ -40,6 +46,8 @@ import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
  *******************************************************************************/
 public class ExecutionAuditor
 {
+   private static final QLogger LOG = QLogger.getLogger(ExecutionAuditor.class);
+
    public static final int MAX_ERROR_LENGTH = 4000;
 
    private final SqlWorkbenchQBitConfig config;
@@ -82,10 +90,7 @@ public class ExecutionAuditor
          inserted[0] = output.getRecords().get(0);
       });
 
-      if(inserted[0] == null || (inserted[0].getErrors() != null && !inserted[0].getErrors().isEmpty()) || inserted[0].getValueInteger("id") == null)
-      {
-         throw (new QException("Could not write the SQL Workbench audit record; the SQL was not run."));
-      }
+      throwIfNotInserted(inserted[0], "Could not write the SQL Workbench audit record; the SQL was not run.");
       execution.setId(inserted[0].getValueInteger("id"));
       return (execution.getId());
    }
@@ -128,7 +133,35 @@ public class ExecutionAuditor
    {
       execution.setCreateDate(execution.getStartTime());
       execution.setErrorMessage(truncate(execution.getErrorMessage()));
-      asSystem(() -> new InsertAction().execute(new InsertInput(tableName()).withRecordEntity(execution)));
+      QRecord[] inserted = new QRecord[1];
+      asSystem(() -> inserted[0] = new InsertAction().execute(new InsertInput(tableName()).withRecordEntity(execution)).getRecords().get(0));
+      throwIfNotInserted(inserted[0], "Could not write the SQL Workbench audit record of a rejected request.");
+   }
+
+
+
+   /*******************************************************************************
+    ** Whether the audit already holds a row with this execution id.
+    *******************************************************************************/
+   public boolean exists(String executionUuid) throws QException
+   {
+      return (SystemUser.call(() -> !QueryAction.execute(tableName(), new QQueryFilter(new QFilterCriteria("executionUuid", QCriteriaOperator.EQUALS, executionUuid)).withLimit(1)).isEmpty()));
+   }
+
+
+
+   /*******************************************************************************
+    ** Fail loudly when an audit insert did not produce a row (record errors,
+    ** e.g. a duplicate executionUuid, or no generated id).
+    *******************************************************************************/
+   private static void throwIfNotInserted(QRecord record, String message) throws QException
+   {
+      if(record == null || (record.getErrors() != null && !record.getErrors().isEmpty()) || record.getValueInteger("id") == null)
+      {
+         String detail = record == null || record.getErrors() == null || record.getErrors().isEmpty() ? "no id returned" : record.getErrors().get(0).getMessage();
+         LOG.warn(message, logPair("detail", detail));
+         throw (new QException(message));
+      }
    }
 
 

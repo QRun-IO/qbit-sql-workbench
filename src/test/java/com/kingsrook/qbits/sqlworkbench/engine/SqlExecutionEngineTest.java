@@ -363,7 +363,7 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
       assertThat(engine.cancel("blocker", caller(OTHER_READER))).isFalse();
       assertThat(engine.cancel("blocker", caller(READER))).isTrue();
       assertThat(blocker.isCancelled()).isTrue();
-      runtime.getRunningStatements().unregister("blocker");
+      runtime.getRunningStatements().unregister("blocker", blocker);
       assertThat(run("SELECT 1", Map.of(), READER).get("status")).isEqualTo("SUCCEEDED");
    }
 
@@ -404,6 +404,87 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
 
       assertThatThrownBy(() -> engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 1", Map.of(), false, null, null, null, null, false, "not-a-uuid"), caller(READER)))
          .isInstanceOf(QBadRequestException.class);
+   }
+
+
+
+   /*******************************************************************************
+    ** A client uuid already in the audit is refused (in any case), before
+    ** anything is registered or recorded.
+    *******************************************************************************/
+   @Test
+   void testReusedExecutionUuidIsRefused() throws Exception
+   {
+      String uuid = "1b4e28ba-2fa1-11d2-883f-0016d3cca427";
+      engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 1", Map.of(), false, null, null, null, null, false, uuid), caller(READER));
+      assertThat(audits()).hasSize(1);
+
+      for(String again : List.of(uuid, uuid.toUpperCase()))
+      {
+         assertThatThrownBy(() -> engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 2", Map.of(), false, null, null, null, null, false, again), caller(READER)))
+            .isInstanceOf(DuplicateExecutionException.class).hasMessageContaining("already used");
+         assertThatThrownBy(() -> engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 2", Map.of(), false, null, null, null, null, false, again), caller(OTHER_READER)))
+            .isInstanceOf(DuplicateExecutionException.class);
+      }
+      assertThat(audits()).hasSize(1);
+      assertThat(SqlWorkbenchRuntime.get(qInstance).getRunningStatements().size()).isZero();
+   }
+
+
+
+   /*******************************************************************************
+    ** Re-sending the id of a run in flight neither overwrites nor removes its
+    ** registration, so the concurrency limit and cancel still hold.
+    *******************************************************************************/
+   @Test
+   void testInFlightExecutionUuidIsRefused() throws Exception
+   {
+      SqlWorkbenchRuntime runtime = SqlWorkbenchRuntime.get(qInstance);
+      String              uuid    = "6fa459ea-ee8a-3ca4-894e-db77e160355e";
+      config.setMaxConcurrentExecutionsPerUser(1);
+      RunningStatements.Running inFlight = runtime.getRunningStatements().register(uuid, READER, 1);
+
+      assertThatThrownBy(() -> engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 1", Map.of(), false, null, null, null, null, false, uuid.toUpperCase()), caller(READER)))
+         .isInstanceOf(DuplicateExecutionException.class);
+      assertThatThrownBy(() -> engine.execute(new ExecutionRequest(BACKEND_NAME, "SELECT 1", Map.of(), false, null, null, null, null, false, uuid), caller(OTHER_READER)))
+         .isInstanceOf(DuplicateExecutionException.class);
+
+      ///////////////////////////////////////////////////
+      // the original is still registered and counted //
+      ///////////////////////////////////////////////////
+      assertThat(runtime.getRunningStatements().isRunning(uuid)).isTrue();
+      assertThatThrownBy(() -> run("SELECT 1", Map.of(), READER)).isInstanceOf(QBadRequestException.class).hasMessageContaining("running");
+      assertThat(engine.cancel(uuid.toUpperCase(), caller(READER))).isTrue();
+      assertThat(inFlight.isCancelled()).isTrue();
+      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid).doesNotContain(uuid);
+
+      runtime.getRunningStatements().unregister(uuid, inFlight);
+      assertThat(run("SELECT 1", Map.of(), READER).get("status")).isEqualTo("SUCCEEDED");
+   }
+
+
+
+   /*******************************************************************************
+    ** An audit insert that fails (here: a duplicate executionUuid) throws,
+    ** rather than being dropped silently.
+    *******************************************************************************/
+   @Test
+   void testAuditRecordFailsLoudly() throws Exception
+   {
+      String uuid = (String) run("SELECT 1", Map.of(), READER).get("executionUuid");
+      ExecutionAuditor auditor = new ExecutionAuditor(config);
+      SqlWorkbenchExecution rejected = new SqlWorkbenchExecution()
+         .withExecutionUuid(uuid)
+         .withUserId(READER)
+         .withBackendName(BACKEND_NAME)
+         .withMode(ExecutionMode.READ_ONLY.name())
+         .withStatus(ExecutionStatus.REJECTED.name())
+         .withSqlText("SELECT 1")
+         .withStartTime(java.time.Instant.now());
+      assertThatThrownBy(() -> auditor.record(rejected)).isInstanceOf(com.kingsrook.qqq.backend.core.exceptions.QException.class).hasMessageContaining("audit");
+      assertThat(audits()).hasSize(1);
+      assertThat(auditor.exists(uuid)).isTrue();
+      assertThat(auditor.exists("00000000-0000-0000-0000-000000000000")).isFalse();
    }
 
 

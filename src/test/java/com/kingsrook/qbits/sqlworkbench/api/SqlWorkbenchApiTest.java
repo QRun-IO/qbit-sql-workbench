@@ -157,6 +157,22 @@ class SqlWorkbenchApiTest extends BaseSqlWorkbenchTest
       assertThatThrownBy(() -> api.execute(caller(READER), Map.of("sql", "SELECT 1"))).isInstanceOf(QBadRequestException.class);
       assertThatThrownBy(() -> api.execute(caller(READER), Map.of("backendName", BACKEND_NAME, "sql", "SELECT 1", "params", "x"))).isInstanceOf(QBadRequestException.class);
       assertThatThrownBy(() -> api.execute(caller(READER), Map.of("backendName", BACKEND_NAME, "sql", "SELECT 1", "pageSize", "x"))).isInstanceOf(QBadRequestException.class);
+      ////////////////////////////////////////////////////////////
+      // ids are normalized at the edge: any case finds the run //
+      ////////////////////////////////////////////////////////////
+      String upper = uuid.toUpperCase();
+      assertThat(api.rows(caller(READER), upper, 0, 10, null, null).get("executionUuid")).isEqualTo(uuid);
+      assertThat(api.exportable(caller(READER), " " + upper + " ")).isNotNull();
+      assertThat(api.cancel(caller(READER), upper).get("cancelled")).isEqualTo(false);
+      assertThat(SqlWorkbenchApi.normalizeUuid(null)).isNull();
+
+      String clientUuid = "9B2C7A10-5E1F-4C3D-8A2B-1C0D9E8F7A6B";
+      Map<String, Object> mine = api.execute(caller(READER), Map.of("backendName", BACKEND_NAME, "sql", "SELECT 1", "executionUuid", clientUuid));
+      assertThat(mine.get("executionUuid")).isEqualTo(clientUuid.toLowerCase());
+      assertThat(api.rows(caller(READER), clientUuid, 0, 10, null, null).get("rowCount")).isEqualTo(1);
+      assertThatThrownBy(() -> api.execute(caller(READER), Map.of("backendName", BACKEND_NAME, "sql", "SELECT 1", "executionUuid", clientUuid.toLowerCase())))
+         .isInstanceOf(com.kingsrook.qbits.sqlworkbench.engine.DuplicateExecutionException.class);
+
       assertThat(SqlWorkbenchApi.intOrNull("12")).isEqualTo(12);
       assertThat(SqlWorkbenchApi.intOrNull("")).isNull();
    }

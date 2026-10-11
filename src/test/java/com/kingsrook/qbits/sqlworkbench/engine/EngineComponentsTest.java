@@ -232,8 +232,41 @@ class EngineComponentsTest
       }
       one.setStatement(null);
       assertThat(running.cancel("missing", "u")).isFalse();
-      running.unregister("1");
+      running.unregister("1", one);
       assertThat(running.size()).isZero();
+   }
+
+
+
+   /*******************************************************************************
+    ** A re-sent id is refused, never overwrites the original, and the
+    ** original's registration is only removed by its own unregister.
+    *******************************************************************************/
+   @Test
+   void testRunningStatementsRefuseDuplicateIds() throws Exception
+   {
+      RunningStatements running = new RunningStatements();
+      RunningStatements.Running original = running.register("dup", "u", 5);
+      assertThat(running.isRunning("dup")).isTrue();
+
+      assertThatThrownBy(() -> running.register("dup", "u", 5)).isInstanceOf(DuplicateExecutionException.class);
+      assertThatThrownBy(() -> running.register("dup", "someone-else", 5)).isInstanceOf(DuplicateExecutionException.class);
+      assertThat(running.size()).isEqualTo(1);
+
+      ///////////////////////////////////////////////////////////////////
+      // a stranger's unregister under the same id leaves the original //
+      ///////////////////////////////////////////////////////////////////
+      RunningStatements.Running other = running.register("other", "u", 5);
+      running.unregister("dup", other);
+      assertThat(running.isRunning("dup")).isTrue();
+      assertThat(running.cancel("dup", "u")).isTrue();
+      assertThat(original.isCancelled()).isTrue();
+
+      running.unregister("dup", original);
+      running.unregister("other", other);
+      assertThat(running.size()).isZero();
+      assertThat(running.isRunning("dup")).isFalse();
+      assertThat(running.isRunning(null)).isFalse();
    }
 
 

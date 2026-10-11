@@ -30,6 +30,7 @@ import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
 import com.kingsrook.qbits.sqlworkbench.engine.Caller;
+import com.kingsrook.qbits.sqlworkbench.engine.DuplicateExecutionException;
 import com.kingsrook.qbits.sqlworkbench.engine.ResultCache;
 import com.kingsrook.qqq.middleware.javalin.QJavalinRouteProviderInterface;
 import com.kingsrook.qqq.middleware.javalin.QJavalinUtils;
@@ -37,6 +38,7 @@ import com.kingsrook.qqq.middleware.javalin.executors.ExecutorSessionUtils;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.ContentType;
 import io.javalin.http.Context;
+import org.eclipse.jetty.http.HttpStatus;
 
 
 /*******************************************************************************
@@ -46,7 +48,8 @@ import io.javalin.http.Context;
  ** Each request gets a session from the instance's authentication module
  ** (ExecutorSessionUtils), then SqlWorkbenchApi checks permissions and does
  ** the work. Errors map through QJavalinUtils.handleException: 400 bad
- ** request, 401 unauthenticated, 403 not permitted, 404 unknown. POST / PUT
+ ** request, 401 unauthenticated, 403 not permitted, 404 unknown, 409 a
+ ** re-used executionUuid. POST / PUT
  ** bodies must be JSON (Content-Type application/json): a cross-site form
  ** cannot send that without a CORS preflight. Request and response bodies
  ** are never logged.
@@ -129,7 +132,7 @@ public class SqlWorkbenchRouteProvider implements QJavalinRouteProviderInterface
       }
       catch(Exception e)
       {
-         QJavalinUtils.handleException(null, context, e);
+         QJavalinUtils.handleException(e instanceof DuplicateExecutionException ? HttpStatus.Code.CONFLICT : null, context, e);
       }
       finally
       {

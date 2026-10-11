@@ -274,7 +274,7 @@ The response is `{executionUuid, dialect, analyze, plan: PlanNode, raw: string}`
 
 SQL errors are results, not HTTP errors: `/execute` and `/explain` return 200 with `status` FAILED, TIMED_OUT, or CANCELLED plus `error` and `sqlState`.
 
-All endpoints need an authenticated QQQ session (cookie or Authorization header, via `ExecutorSessionUtils.setupSession`) and `sqlWorkbench.hasAccess`. Errors are `{"error": "..."}` with 400, 401, 403, 404, or 500, through `QJavalinUtils.handleException`. Bodies are JSON. Request and response bodies are never logged.
+All endpoints need an authenticated QQQ session (cookie or Authorization header, via `ExecutorSessionUtils.setupSession`) and `sqlWorkbench.hasAccess`. Errors are `{"error": "..."}` with 400, 401, 403, 404, 409 (a re-used `executionUuid`), or 500, through `QJavalinUtils.handleException`. Execution UUIDs are case-insensitive on every path (`/execute`, `/executions/{uuid}/rows`, `/export`, `/cancel`, snapshots); the server stores and returns them lower-case. Bodies are JSON. Request and response bodies are never logged.
 
 ```yaml
 GET  /capabilities
@@ -287,7 +287,8 @@ GET  /schema/{backendName}?refresh=bool          -> Schema (see 4.6)
 POST /execute
   body: { backendName, sql, params?: {name: value}, mode?: READ_ONLY|WRITE, notebookId?, cellKey?,
           pageSize?, confirmToken?, acknowledgeRowGuard?,
-          executionUuid? }   # optional client-chosen UUID, so the client can cancel before the response
+          executionUuid? }   # optional client-chosen UUID, so the client can cancel before the response;
+                             # single-use: an id that is running or already audited gets 409
   200 (READ_ONLY / commit): { executionUuid, status, mode, statements: [{index, kind, leadingKeyword, affectedRows?}],
           columns: [Column], rows: [[...]], rowCount, hasMore, truncated, truncatedReason?, durationMs,
           rowsAffected? }

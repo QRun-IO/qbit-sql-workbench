@@ -33,6 +33,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -112,9 +113,22 @@ public class SqlExecutionEngine
     *******************************************************************************/
    public Map<String, Object> execute(ExecutionRequest request, Caller caller) throws QException
    {
-      if(request.executionUuid() != null && !UUID_PATTERN.matcher(request.executionUuid()).matches())
+      if(request.executionUuid() != null)
       {
-         throw (new QBadRequestException("executionUuid must be a UUID."));
+         if(!UUID_PATTERN.matcher(request.executionUuid()).matches())
+         {
+            throw (new QBadRequestException("executionUuid must be a UUID."));
+         }
+
+         /////////////////////////////////////////////////////////////////////
+         // ids are single-use: a re-sent id must not reach the registry or //
+         // the audit (UNIQUE) - it is refused before anything is recorded  //
+         /////////////////////////////////////////////////////////////////////
+         String uuid = request.executionUuid().toLowerCase(Locale.ROOT);
+         if(runtime.getRunningStatements().isRunning(uuid) || auditor.exists(uuid))
+         {
+            throw (new DuplicateExecutionException(uuid));
+         }
       }
 
       WorkbenchBackends.Target target     = backends.getTarget(request.backendName());
@@ -226,7 +240,7 @@ public class SqlExecutionEngine
     *******************************************************************************/
    public boolean cancel(String executionUuid, Caller caller)
    {
-      return (runtime.getRunningStatements().cancel(executionUuid, caller.userId()));
+      return (executionUuid != null && runtime.getRunningStatements().cancel(executionUuid.toLowerCase(Locale.ROOT), caller.userId()));
    }
 
 
@@ -682,7 +696,7 @@ public class SqlExecutionEngine
       }
       finally
       {
-         runtime.getRunningStatements().unregister(audit.getExecutionUuid());
+         runtime.getRunningStatements().unregister(audit.getExecutionUuid(), registration);
       }
    }
 
@@ -790,7 +804,7 @@ public class SqlExecutionEngine
    private SqlWorkbenchExecution newAudit(ExecutionRequest request, Caller caller, Map<String, Object> params, ExecutionMode mode)
    {
       return (new SqlWorkbenchExecution()
-         .withExecutionUuid(request.executionUuid() != null ? request.executionUuid().toLowerCase() : UUID.randomUUID().toString())
+         .withExecutionUuid(request.executionUuid() != null ? request.executionUuid().toLowerCase(Locale.ROOT) : UUID.randomUUID().toString())
          .withUserId(caller.userId())
          .withUserName(caller.userName())
          .withBackendName(request.backendName())

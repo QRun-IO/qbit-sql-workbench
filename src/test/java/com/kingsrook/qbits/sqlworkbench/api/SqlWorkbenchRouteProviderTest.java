@@ -153,6 +153,18 @@ class SqlWorkbenchRouteProviderTest extends BaseSqlWorkbenchTest
       assertThat(json(send("POST", "/executions/" + uuid + "/cancel", READER, "{}", "application/json")).get("cancelled")).isEqualTo(false);
       assertThat((List<?>) json(send("GET", "/history?limit=5", READER, null, null)).get("executions")).hasSize(3);
       assertThat(json(send("GET", "/schema/h2", READER, null, null)).get("dialect")).isEqualTo("h2");
+
+      ///////////////////////////////////////////////////////////////////
+      // a client-chosen id: any case on the paths, single-use (409)   //
+      ///////////////////////////////////////////////////////////////////
+      String clientUuid = "3F2504E0-4F89-11D3-9A0C-0305E82C3301";
+      String body       = "{\"backendName\":\"h2\",\"sql\":\"SELECT 1 AS one\",\"executionUuid\":\"" + clientUuid + "\"}";
+      assertThat(json(send("POST", "/execute", READER, body, "application/json")).get("executionUuid")).isEqualTo(clientUuid.toLowerCase());
+      assertThat(send("GET", "/executions/" + clientUuid + "/rows", READER, null, null).statusCode()).isEqualTo(200);
+      assertThat(send("GET", "/executions/" + clientUuid + "/export", READER, null, null).statusCode()).isEqualTo(200);
+      HttpResponse<String> again = send("POST", "/execute", READER, body, "application/json");
+      assertThat(again.statusCode()).isEqualTo(409);
+      assertThat(again.body()).contains("already used");
    }
 
 
