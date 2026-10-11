@@ -490,6 +490,47 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
+    ** A connection that cannot be opened answers with a generic message: the
+    ** driver's (URL, host, user) stays in the server log.
+    *******************************************************************************/
+   @Test
+   void testConnectionFailureMessageIsGeneric() throws Exception
+   {
+      config.withReadOnlyCredentials(BACKEND_NAME, new com.kingsrook.qbits.sqlworkbench.SqlWorkbenchCredentials()
+         .withUsername("secret_user").withPassword("secret_pw").withJdbcUrl("jdbc:h2:mem:no_such_secret_db;IFEXISTS=TRUE"));
+
+      Map<String, Object> response = run("SELECT 1", Map.of(), READER);
+      assertThat(response.get("status")).isEqualTo("FAILED");
+      assertThat(response.get("error")).isEqualTo("Could not connect to backend h2; see the server log.");
+      assertThat(response.get("sqlState")).isNull();
+
+      SqlWorkbenchExecution audit = audits().get(0);
+      assertThat(audit.getStatus()).isEqualTo("FAILED");
+      assertThat(audit.getErrorMessage()).doesNotContain("secret").doesNotContain("no_such");
+   }
+
+
+
+   /*******************************************************************************
+    ** An unexpected RuntimeException inside a started run finishes its audit
+    ** row as FAILED (not left RUNNING) and still unregisters it.
+    *******************************************************************************/
+   @Test
+   void testUnexpectedExceptionFinishesAuditAsFailed() throws Exception
+   {
+      config.setDefaultPageSize(null);
+      assertThatThrownBy(() -> run("SELECT 1", Map.of(), READER)).isInstanceOf(NullPointerException.class);
+
+      SqlWorkbenchExecution audit = audits().get(0);
+      assertThat(audit.getStatus()).isEqualTo("FAILED");
+      assertThat(audit.getErrorMessage()).contains("unexpectedly");
+      assertThat(audit.getEndTime()).isNotNull();
+      assertThat(SqlWorkbenchRuntime.get(qInstance).getRunningStatements().size()).isZero();
+   }
+
+
+
+   /*******************************************************************************
     **
     *******************************************************************************/
    @Test

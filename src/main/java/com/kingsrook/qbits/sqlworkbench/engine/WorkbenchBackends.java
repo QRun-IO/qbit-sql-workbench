@@ -181,7 +181,32 @@ public class WorkbenchBackends
     *******************************************************************************/
    public Connection openConnection(Target target, boolean readOnly) throws SQLException
    {
-      return (ConnectionManager.getConnection(connectionSource(target, readOnly)));
+      try
+      {
+         return (ConnectionManager.getConnection(connectionSource(target, readOnly)));
+      }
+      catch(SQLException e)
+      {
+         throw (new ConnectionFailedException(target.name(), e));
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** The connection to a target could not be opened. Its driver message may
+    ** carry hosts, user names or URL details, so callers show a generic
+    ** message (getMessage) and log the cause server-side.
+    *******************************************************************************/
+   public static class ConnectionFailedException extends SQLException
+   {
+      /*******************************************************************************
+       **
+       *******************************************************************************/
+      public ConnectionFailedException(String backendName, SQLException cause)
+      {
+         super("Could not connect to backend " + backendName + "; see the server log.", (String) null, cause);
+      }
    }
 
 

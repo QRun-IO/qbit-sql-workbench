@@ -661,7 +661,16 @@ public class SqlExecutionEngine
          status = ExecutionStatus.FAILED;
       }
 
+      //////////////////////////////////////////////////////////////////////
+      // a failure to connect is not the caller's SQL: its driver message //
+      // can expose hosts / users / URLs, so it stays in the server log   //
+      //////////////////////////////////////////////////////////////////////
       String message = e.getMessage();
+      if(e instanceof WorkbenchBackends.ConnectionFailedException)
+      {
+         LOG.warn("SQL Workbench could not open a connection", e.getCause(), logPair("executionUuid", audit.getExecutionUuid()), logPair("backendName", audit.getBackendName()));
+      }
+
       finish(audit, status, null, null, false, message);
       response.put("status", status.name());
       response.put("error", message);
@@ -687,8 +696,17 @@ public class SqlExecutionEngine
       {
          auditor.start(audit);
          Deferred            deferred = new Deferred();
-         Map<String, Object> response = run.run(registration, deferred);
-         deferred.run();
+         Map<String, Object> response;
+         try
+         {
+            response = run.run(registration, deferred);
+            deferred.run();
+         }
+         catch(QException | RuntimeException e)
+         {
+            failUnfinished(audit, e);
+            throw (e);
+         }
          LOG.info("SQL Workbench execution", logPair("executionUuid", audit.getExecutionUuid()), logPair("backendName", audit.getBackendName()),
             logPair("mode", audit.getMode()), logPair("status", audit.getStatus()), logPair("durationMs", audit.getDurationMs()));
          response.put("durationMs", audit.getDurationMs());
@@ -697,6 +715,30 @@ public class SqlExecutionEngine
       finally
       {
          runtime.getRunningStatements().unregister(audit.getExecutionUuid(), registration);
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** An unexpected exception escaped a started run: if its audit row is still
+    ** RUNNING, finish it as FAILED (with a generic message; the detail goes to
+    ** the server log). A failure to do so is logged, never masks the original.
+    *******************************************************************************/
+   private void failUnfinished(SqlWorkbenchExecution audit, Exception e)
+   {
+      LOG.warn("SQL Workbench execution failed unexpectedly", e, logPair("executionUuid", audit.getExecutionUuid()), logPair("backendName", audit.getBackendName()));
+      if(audit.getId() == null || !ExecutionStatus.RUNNING.name().equals(audit.getStatus()))
+      {
+         return;
+      }
+      try
+      {
+         finish(audit, ExecutionStatus.FAILED, null, null, false, "The execution failed unexpectedly; see the server log.");
+      }
+      catch(Exception finishFailure)
+      {
+         LOG.warn("Could not finish the SQL Workbench audit record", finishFailure, logPair("executionUuid", audit.getExecutionUuid()));
       }
    }
 

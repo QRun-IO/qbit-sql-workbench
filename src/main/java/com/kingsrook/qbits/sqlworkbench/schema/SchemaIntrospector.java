@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
@@ -37,6 +38,7 @@ import com.kingsrook.qqq.backend.core.utils.StringUtils;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
 import com.kingsrook.qbits.sqlworkbench.engine.WorkbenchBackends;
 import com.kingsrook.qqq.backend.module.rdbms.actions.AbstractRDBMSAction;
+import static com.kingsrook.qqq.backend.core.logging.LogUtils.logPair;
 
 
 /*******************************************************************************
@@ -48,6 +50,8 @@ import com.kingsrook.qqq.backend.module.rdbms.actions.AbstractRDBMSAction;
  *******************************************************************************/
 public class SchemaIntrospector
 {
+   private static final QLogger LOG = QLogger.getLogger(SchemaIntrospector.class);
+
    private static final Set<String> SYSTEM_SCHEMAS = Set.of("pg_catalog", "information_schema", "pg_toast", "mysql", "performance_schema", "sys");
 
    private static final List<String> CORE_KEYWORDS = List.of("SELECT", "FROM", "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "JOIN",
@@ -106,7 +110,12 @@ public class SchemaIntrospector
       }
       catch(SQLException e)
       {
-         throw (new QException("Could not read the schema of backend " + target.name() + ": " + e.getMessage(), e));
+         ////////////////////////////////////////////////////////////////
+         // driver messages can expose connection details: log them, //
+         // answer generically                                        //
+         ////////////////////////////////////////////////////////////////
+         LOG.warn("SQL Workbench could not read a schema", e, logPair("backendName", target.name()));
+         throw (new QException("Could not read the schema of backend " + target.name() + "; see the server log.", e));
       }
 
       schema.put("qqqTables", qqqTables(target.name()));
