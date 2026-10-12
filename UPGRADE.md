@@ -50,6 +50,8 @@ COMMIT;
 
    Saved views and reports can also name columns of joined tables (`sqlWorkbenchCell.title`) inside their JSON filter or column lists; search those columns for `sqlWorkbench` and replace the table part. Rebuild any search index whose document ids embed table names.
 5. **Frontends.** Links to `/app/sqlWorkbench/sqlWorkbenchNotebook/...` become `/app/sqlWorkbench/sql_workbench_notebook/...`.
+6. **Navigation and the notebook UI.** The app's home (`/app/sqlWorkbench`) is now a dashboard; the notebook editor moved to the Runner (`/app/sqlWorkbenchRunner`, `?notebook=<id>` opens one). Update bookmarks and links that expected the editor on the app page. The nav lists only Notebooks and the execution audit; if your host builds its own menus or nav tests, drop the cell, version, pinned-result and share tables from them (they are child lists on a notebook). Nothing to grant: the Runner and the dashboard use the app's access permission, and Activity by User the admin permission.
+7. **Optional: ESB and Quick Search.** Wire `SqlWorkbenchIntegrations.esbTableNames` and `quickSearchTables` into your configuration (README, "ESB and Quick Search"). Adding tables to Quick Search needs an index rebuild or a basepull for the existing rows.
 
 ## To 1.0.0-RC.2
 
