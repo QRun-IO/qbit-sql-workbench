@@ -20,21 +20,13 @@ package com.kingsrook.qbits.sqlworkbench;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import com.kingsrook.qqq.backend.core.exceptions.QException;
-import com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData;
-import com.kingsrook.qqq.backend.core.context.QContext;
-import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
-import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
-import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppMetaData;
-import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
-import com.kingsrook.qqq.backend.core.model.metadata.processes.QProcessMetaData;
-import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
-import com.kingsrook.qqq.backend.core.modules.backend.implementations.memory.MemoryBackendModule;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchAppMetaDataProducer;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchHomeWidgetsMetaDataProducer;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchRunnerAppMetaDataProducer;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchWidgetMetaDataProducer;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchWidgetRenderer;
+import com.kingsrook.qbits.sqlworkbench.metadata.WorkbenchBackendPossibleValueProvider;
+import com.kingsrook.qbits.sqlworkbench.model.CellType;
 import com.kingsrook.qbits.sqlworkbench.model.ShareAudienceType;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
@@ -42,6 +34,18 @@ import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookVersion;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
+import com.kingsrook.qqq.backend.core.context.QContext;
+import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.actions.values.SearchPossibleValueSourceInput;
+import com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData;
+import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.AdornmentType;
+import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppMetaData;
+import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
+import com.kingsrook.qqq.backend.core.model.metadata.processes.QProcessMetaData;
+import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
+import com.kingsrook.qqq.backend.core.modules.backend.implementations.memory.MemoryBackendModule;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSTableBackendDetails;
 import com.kingsrook.qqq.middleware.javalin.QJavalinMetaData;
 import org.junit.jupiter.api.Test;
@@ -108,7 +112,8 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       QContext.clear();
       assertThat(com.kingsrook.qqq.backend.core.actions.permissions.PermissionsHelper.getAllAvailablePermissionNames(qInstance))
          .contains("sql_workbench_notebook.read", "sql_workbench_notebook_share.insert", "sql_workbench.hasAccess")
-         .doesNotContain("sql_workbench_execution.delete", "sql_workbench_notebook_version.insert");
+         .doesNotContain("sql_workbench_execution.insert", "sql_workbench_execution.edit", "sql_workbench_execution.delete",
+            "sql_workbench_notebook_version.insert", "sql_workbench_notebook_version.edit", "sql_workbench_result_snapshot.insert");
       loginAs(READER);
 
       QWidgetMetaData widget = (QWidgetMetaData) qInstance.getWidget(SqlWorkbenchWidgetMetaDataProducer.NAME);
@@ -155,6 +160,10 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       assertThat(instance.getTable("ns_sql_workbench_notebook")).isNotNull();
       assertThat(instance.getTable("ns_sql_workbench_cell").getField("notebookId").getPossibleValueSourceName()).isEqualTo("ns_sql_workbench_notebook");
       assertThat(instance.getApp("ns_sqlWorkbench")).isNotNull();
+      assertThat(instance.getTable("ns_sql_workbench_cell").getField("backendName").getPossibleValueSourceName()).isEqualTo("ns_sql_workbench_backend");
+      assertThat(instance.getPossibleValueSource("ns_sql_workbench_backend")).isNotNull();
+      assertThat(instance.getTable("ns_sql_workbench_cell").getField("cellType").getPossibleValueSourceName()).isEqualTo("ns_sql_workbench_cell_type");
+      assertThat(instance.getPossibleValueSource("ns_sql_workbench_cell_type")).isNotNull();
       assertThat(QJavalinMetaData.of(instance)).isNull();
 
       SqlWorkbenchRuntime first = prefixed.getRuntime();
@@ -223,6 +232,70 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       }
       assertThat(instance.getPossibleValueSource(ShareAudienceType.NAME)).isNotNull();
       assertThat(instance.getSecurityKeyType("sql_workbench_user")).isNotNull();
+   }
+
+
+
+   /*******************************************************************************
+    ** Record screens expose readable sections and constrained editor fields.
+    *******************************************************************************/
+   @Test
+   void testRecordScreenMetaData() throws Exception
+   {
+      QTableMetaData notebook = qInstance.getTable(SqlWorkbenchNotebook.TABLE_NAME);
+      QTableMetaData cell = qInstance.getTable(SqlWorkbenchCell.TABLE_NAME);
+      assertThat(notebook.getSections()).filteredOn(section -> section.getWidgetName() != null)
+         .extracting(section -> section.getLabel())
+         .containsExactly("Runner", "Cells", "Shares", "Snapshots (pinned results)", "Versions", "Runs");
+      for(var section : notebook.getSections())
+      {
+         if(section.getWidgetName() != null && !"runner".equals(section.getName()))
+         {
+            assertThat(qInstance.getWidget(section.getWidgetName()).getLabel()).isEqualTo(section.getLabel());
+         }
+      }
+      String backendPvs = WorkbenchBackendPossibleValueProvider.NAME;
+      assertThat(notebook.getField("defaultBackendName").getPossibleValueSourceName()).isEqualTo(backendPvs);
+      assertThat(cell.getField("backendName").getPossibleValueSourceName()).isEqualTo(backendPvs);
+      assertThat(qInstance.getPossibleValueSource(backendPvs).getType().name()).isEqualTo("CUSTOM");
+      assertThat(cell.getField("cellKey").getIsEditable()).isFalse();
+      assertThat(qInstance.getTable(SqlWorkbenchResultSnapshot.TABLE_NAME).getField("label").getIsEditable()).isTrue();
+      assertThat(qInstance.getTable(SqlWorkbenchResultSnapshot.TABLE_NAME).getField("resultJson").getIsEditable()).isFalse();
+      assertThat(cell.getField("cellType").getDefaultValue()).isEqualTo("SQL");
+      assertThat(cell.getField("cellType").getPossibleValueSourceName()).isEqualTo(CellType.NAME);
+      assertThat(qInstance.getPossibleValueSource(CellType.NAME).getEnumValues())
+         .extracting(value -> value.getId().toString()).containsExactly("SQL", "MARKDOWN");
+      for(String table : List.of(SqlWorkbenchNotebook.TABLE_NAME, SqlWorkbenchExecution.TABLE_NAME))
+      {
+         var field = qInstance.getTable(table).getField("parametersJson");
+         assertThat(field.getAdornment(AdornmentType.CODE_EDITOR).orElseThrow().getValues())
+            .containsEntry("languageMode", "json");
+         assertThat(field.getIsEditable()).isEqualTo(table.equals(SqlWorkbenchNotebook.TABLE_NAME));
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** The live backend PVS honors all execution target exclusions.
+    *******************************************************************************/
+   @Test
+   void testBackendChoices() throws Exception
+   {
+      qInstance.addBackend(defineH2Backend("other"));
+      qInstance.addBackend(defineH2Backend("excluded"));
+      qInstance.addBackend(defineH2Backend("h2__sqlWorkbenchReadOnly"));
+      qInstance.addBackend(defineH2Backend("h2__sqlWorkbenchWrite"));
+      qInstance.addBackend(new QBackendMetaData().withName("mem").withBackendType(MemoryBackendModule.class));
+      config.setExcludedBackendNames(List.of("excluded"));
+      var provider = new WorkbenchBackendPossibleValueProvider();
+      var input = new SearchPossibleValueSourceInput();
+      assertThat(provider.search(input)).extracting(value -> value.getId()).containsExactlyInAnyOrder(BACKEND_NAME, "other");
+      assertThat(provider.getPossibleValue(BACKEND_NAME).getLabel()).isEqualTo(BACKEND_NAME);
+      assertThat(provider.getPossibleValue("excluded")).isNull();
+      assertThat(provider.getPossibleValue("unknown")).isNull();
+      config.setAllowedBackendNames(List.of(BACKEND_NAME, "excluded"));
+      assertThat(provider.search(input)).extracting(value -> value.getId()).containsExactly(BACKEND_NAME);
    }
 
 
