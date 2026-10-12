@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The format follows Keep
 - **Runner.** The notebook editor (`SQL_WORKBENCH` widget) moves to its own nav entry: the `sqlWorkbenchRunner` child app, labeled Runner. Open a notebook with `/app/sqlWorkbenchRunner?notebook=<id>`.
 - On a notebook's record view: an Open in Runner widget, and a Runs child list (its executions the viewer may see) through the new join `sql_workbench_notebook_join_sql_workbench_execution`.
 - `SqlWorkbenchIntegrations`: opt-in ESB (`esbTableNames`) and Quick Search (`quickSearchTables`) hooks for the main tables, with no dependency on either module.
+- **Record developer panel** "SQL Workbench" (`SqlWorkbenchDeveloperPanelProvider`, registered by `SqlWorkbenchDeveloperPanelsMetaDataProducer`): read-only `SELECT`s for the record and its table in the backend's own names, backend details, and links that open them in the Runner as a new cell (`/app/sqlWorkbenchRunner?sql=&backend=`, never run). Requires QQQ 4.1.0-RC.4 (the developer panel contract) and a Next UI with the Runner `?sql=` support.
 
 ### Changed
 - **The nav lists only the main tables**: Notebooks and the execution audit, after the Runner. Cells, versions, pinned results and shares are child lists on a notebook (still standard tables, reachable by URL and API). The app's widget list is now the dashboard, not the `SQL_WORKBENCH` widget; links to `/app/sqlWorkbench` that expected the editor should point at `/app/sqlWorkbenchRunner`.
