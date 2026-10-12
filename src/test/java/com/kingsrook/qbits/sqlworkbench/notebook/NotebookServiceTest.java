@@ -220,6 +220,36 @@ class NotebookServiceTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
+    ** With QQQ core permission enforcement on, an ordinary user's permission set
+    ** (getUserPermissionNames) is enough for the whole notebook flow, including
+    ** pinning a result (a top-level snapshot insert).
+    *******************************************************************************/
+   @Test
+   void testUserPermissionsSufficeWithCoreEnforcement() throws Exception
+   {
+      qInstance.setEnforcePermissionsInCoreActions(true);
+      try
+      {
+         Integer id = (Integer) service.create(body("Enforced", List.of(cell("c1", "SQL", "SELECT * FROM person"))), as(READER)).get("id");
+         service.update(id, Map.of("title", "Enforced v2"), as(READER));
+
+         SqlExecutionEngine  engine   = new SqlExecutionEngine(qInstance, SqlWorkbenchRuntime.get(qInstance));
+         Map<String, Object> response = engine.execute(ExecutionRequest.readOnly(BACKEND_NAME, "SELECT * FROM person", Map.of()), as(READER));
+
+         Map<String, Object> snapshot = service.createSnapshot(id, Map.of("executionUuid", response.get("executionUuid"), "cellKey", "c1"), as(READER), "SELECT * FROM person");
+         assertThat(snapshot.get("id")).isNotNull();
+         service.deleteSnapshot(id, (Integer) snapshot.get("id"), as(READER));
+         service.delete(id, as(READER));
+      }
+      finally
+      {
+         qInstance.setEnforcePermissionsInCoreActions(null);
+      }
+   }
+
+
+
+   /*******************************************************************************
     **
     *******************************************************************************/
    @Test

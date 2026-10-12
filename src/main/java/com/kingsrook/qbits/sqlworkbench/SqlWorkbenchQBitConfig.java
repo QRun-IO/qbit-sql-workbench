@@ -377,8 +377,8 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    /*******************************************************************************
     ** Every permission an ordinary workbench user needs: the access
     ** permission, read / insert / edit / delete on notebooks and cells, read
-    ** on versions, shares and the execution audit, and read / edit (label) /
-    ** delete on pinned snapshots. Record locks narrow every one of these to
+    ** on versions, shares and the execution audit, and read / insert (pin) /
+    ** edit (label) / delete on pinned snapshots. Record locks narrow every one of these to
     ** the user's own (or shared-with-them, for reads) rows.
     *******************************************************************************/
    @JsonIgnore
@@ -389,7 +389,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
       addTablePermissions(names, SqlWorkbenchNotebook.TABLE_NAME, "read", "insert", "edit", "delete");
       addTablePermissions(names, SqlWorkbenchCell.TABLE_NAME, "read", "insert", "edit", "delete");
       addTablePermissions(names, SqlWorkbenchNotebookVersion.TABLE_NAME, "read");
-      addTablePermissions(names, SqlWorkbenchResultSnapshot.TABLE_NAME, "read", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchResultSnapshot.TABLE_NAME, "read", "insert", "edit", "delete");
       addTablePermissions(names, SqlWorkbenchNotebookShare.TABLE_NAME, "read");
       addTablePermissions(names, SqlWorkbenchExecution.TABLE_NAME, "read");
       return (names);
