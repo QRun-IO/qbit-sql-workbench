@@ -21,9 +21,9 @@ All notable changes to this project are documented here. The format follows Keep
 - **Pinning a result works with QQQ core permission enforcement on.** `getUserPermissionNames()` now includes `sql_workbench_result_snapshot.insert`: pinning is a top-level insert, which core enforcement checks, so hosts no longer need to grant it by hand. Record locks still limit snapshots to the user's own notebooks.
 
 ### Deprecated
-- `LEGACY_TABLE_NAME` on each entity, `ShareAudienceType.LEGACY_NAME` and `SqlWorkbenchQBitConfig.LEGACY_*` hold the pre-RC.3 names, for migrating stored references only.
+- `LEGACY_TABLE_NAME` on each entity, `ShareAudienceType.LEGACY_NAME` and `SqlWorkbenchQBitConfig.LEGACY_*` hold the pre-RC.4 names, for migrating stored references only.
 
-### Upgrade from RC.2
+### Upgrade from RC.2 (or RC.3, a copy of RC.2)
 - Follow [UPGRADE.md](UPGRADE.md): grant the renamed permissions and rename stored table names (audit, saved views and reports). No DDL.
 
 ## [1.0.0-RC.3] - 2026-10-12

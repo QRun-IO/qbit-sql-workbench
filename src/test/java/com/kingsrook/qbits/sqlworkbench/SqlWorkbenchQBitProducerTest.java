@@ -178,9 +178,9 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
-    ** Owner naming rule (1.0.0-RC.3): table, possible-value source, permission
+    ** Owner naming rule (1.0.0-RC.4): table, possible-value source, permission
     ** and security key names are lowercase snake_case prefixed with the qbit's
-    ** name; the pre-RC.3 names stay available only as deprecated constants.
+    ** name; the pre-RC.4 names stay available only as deprecated constants.
     *******************************************************************************/
    @Test
    @SuppressWarnings("deprecation")
