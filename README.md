@@ -15,7 +15,7 @@ The full design (architecture, data model, security model, limits, API contract,
 
 ## Requirements
 
-- Java 21 and QQQ 4.1 (built against `4.1.0-RC.2`).
+- Java 21 and QQQ 4.1 (built against `4.1.0-RC.4`).
 - `qqq-backend-module-rdbms` for the targets. `qqq-middleware-javalin` for the REST routes; it is optional, and without it the engine still works but no routes are registered.
 - A Next UI release that renders the `SQL_WORKBENCH` widget.
 
@@ -87,6 +87,16 @@ Grant `sqlWorkbenchAdmin.hasAccess` only to administrators or auditors. Ordinary
 
 `writeModeEnabled=false` turns write mode off for everyone.
 
+## Record developer panel
+
+With QQQ 4.1.0-RC.4 or later, the qbit registers a **SQL Workbench** panel for a record's developer view (`/app/{table}/{id}/dev` in the Next UI). It shows for tables on an RDBMS backend the workbench targets (honoring `allowedBackendNames` / `excludedBackendNames`), and only to users with `sqlWorkbench.hasAccess`. It contains:
+
+- A read-only `SELECT` for the record and one for the table (`LIMIT 100`), in the backend's own table and column names (aliased to the QQQ field names), with identifiers quoted and the primary key written as an escaped literal for the dialect.
+- The backend, dialect, database table, and whether read-only sessions use the backend's read-only replica.
+- Links that open each query in the workbench (`/app/sqlWorkbench?sql=...&backend=...`, with the table name prefix applied). The workbench opens the SQL as a new cell and does not run it.
+
+The panel only builds text. What runs is what the user executes, under their workbench permissions; the write permission does not change the panel.
+
 ## Safety model
 
 > **Production: configure `readOnlyCredentials` for every target backend.** Use a dedicated database role with `SELECT` grants only: no write privileges, not a superuser, no `pg_signal_backend` (or MySQL `PROCESS` / `SUPER` / `CONNECTION_ADMIN`). Without it, read-only mode connects as the application's own role and relies on the classifier and the session's `READ ONLY` transaction alone. On H2 / generic backends there is no enforced read-only transaction, so the classifier is the only control. On Postgres a `READ ONLY` transaction still lets the application role call side-effecting functions such as `pg_terminate_backend()` or `pg_cancel_backend()`. `/capabilities` reports `readOnlyCredentials: false` / `readOnlyEnforced: false` per backend so you can check.
@@ -153,7 +163,7 @@ A checklist for adding the workbench to a QQQ application. Each row points to th
 | Item | What to do |
 |---|---|
 | Coordinates | `com.kingsrook.qbits:qbit-sql-workbench`. Current release candidate: `1.0.0-RC.1` (Maven Central, published from `release/1.0`). |
-| QQQ version | QQQ 4.1, `4.1.0-RC.2` or later. Java 21. |
+| QQQ version | QQQ 4.1, `4.1.0-RC.4` or later. Java 21. |
 | Dependencies | `qqq-backend-module-rdbms` comes in transitively. Add `qqq-middleware-javalin` yourself for the REST routes; it is optional in this qbit's POM, and without it no routes are registered. |
 | Frontend | A Next UI (`qqq-frontend-next`) release that renders the `SQL_WORKBENCH` widget: `v1.0.0-RC.13` or later. Other frontends show the app and tables but not the notebook. |
 | Registration | `new SqlWorkbenchQBitProducer().withQBitConfig(config).produce(qInstance)` after your backends are in the instance. The producer registers its own QBit metadata; don't add it by hand. To nest the app (for example under Admin), re-parent `SqlWorkbenchQBitProducer.APP_NAME` after producing. |

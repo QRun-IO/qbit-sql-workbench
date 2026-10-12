@@ -40,6 +40,7 @@ How tests are split:
 - `notebook/`: `NotebookService` (CRUD, visibility, versions in one transaction, snapshots).
 - `api/`: `SqlWorkbenchApi` (transport-agnostic, permission checks), `SqlWorkbenchRouteProvider` (Javalin 7 routes under `/qqq/v1/sql-workbench`), `ResultExporter` (CSV/JSON/XLSX via fastexcel), and `SqlWorkbenchRoutes`.
 - `metadata/`: the 5 tables, the notebook PVS, the `SQL_WORKBENCH` widget and its renderer, and the `sqlWorkbench` app.
+- `developer/`: `SqlWorkbenchDeveloperPanelProvider` (the "SQL Workbench" record developer panel, registered by `metadata/SqlWorkbenchDeveloperPanelsMetaDataProducer`) and `RecordSql` (read-only SELECTs in backend names, dialect quoting and literals).
 
 **Invariants (do not break):**
 - Never log SQL text, parameters, or results. Only the audit table holds them.
@@ -58,7 +59,7 @@ How tests are split:
 ## Dependencies
 
 - Java 21.
-- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.2` ahead of it, as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
+- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.4` ahead of it (RC.4 brings the record developer panel contract), as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
 - `qqq-backend-core`, `qqq-backend-module-rdbms`, and `qqq-middleware-javalin` (optional).
 - Tests: JUnit 5, AssertJ, Mockito, H2, `qqq-backend-module-sqlite`/`-postgres` (drivers), Testcontainers 1.21.4.
 

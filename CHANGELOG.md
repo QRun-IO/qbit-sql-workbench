@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog; versions follow semantic versioning.
 
+## [Unreleased]
+
+### Added
+- Record developer panel "SQL Workbench" (`SqlWorkbenchDeveloperPanelProvider`, registered by `SqlWorkbenchDeveloperPanelsMetaDataProducer`): read-only `SELECT`s for the record and its table in the backend's own names, backend details, and links that open them in the workbench (`?sql=&backend=`). Requires QQQ 4.1.0-RC.4 (the developer panel contract) and a Next UI with the workbench `?sql=` support.
+
+### Changed
+- Built against QQQ 4.1.0-RC.4.
+
 ## [1.0.0-RC.1] - 2026-10-11
 
 First release candidate of 1.0, published to Maven Central from `release/1.0`. It contains every change listed under 1.0.0 below. Requires QQQ 4.1 (built against 4.1.0-RC.2) and a Next UI release that renders the `SQL_WORKBENCH` widget (`v1.0.0-RC.13` or later).
