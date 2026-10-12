@@ -27,11 +27,14 @@ import java.util.Set;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchSecurity;
+import com.kingsrook.qbits.sqlworkbench.engine.WorkbenchBackends;
 import com.kingsrook.qbits.sqlworkbench.notebook.NotebookVersioning;
 import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.actions.customizers.AbstractPreInsertCustomizer;
 import com.kingsrook.qqq.backend.core.actions.customizers.TableCustomizerInterface;
+import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
@@ -278,4 +281,26 @@ public abstract class WorkbenchTableCustomizer implements TableCustomizerInterfa
    {
       return (SqlWorkbenchSecurity.isSystemUser());
    }
+
+
+
+   /*******************************************************************************
+    ** Optional backend selections must name an allowed workbench target.
+    *******************************************************************************/
+   protected static void validateBackend(QRecord record, String fieldName) throws QException
+   {
+      String name = record.getValueString(fieldName);
+      if(name != null)
+      {
+         try
+         {
+            new WorkbenchBackends(QContext.getQInstance(), SqlWorkbenchRuntime.get()).getTarget(name);
+         }
+         catch(QNotFoundException e)
+         {
+            badInput(record, "Select an available SQL Workbench backend.");
+         }
+      }
+   }
+
 }

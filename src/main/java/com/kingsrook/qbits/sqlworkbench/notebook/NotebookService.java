@@ -36,6 +36,7 @@ import com.kingsrook.qbits.sqlworkbench.engine.Caller;
 import com.kingsrook.qbits.sqlworkbench.engine.CollectedResult;
 import com.kingsrook.qbits.sqlworkbench.engine.ColumnInfo;
 import com.kingsrook.qbits.sqlworkbench.engine.ResultCache;
+import com.kingsrook.qbits.sqlworkbench.model.CellType;
 import com.kingsrook.qbits.sqlworkbench.model.ShareAudienceType;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
@@ -89,8 +90,8 @@ public class NotebookService
 {
    public static final String VISIBILITY_PERSONAL = "PERSONAL";
    public static final String VISIBILITY_SHARED   = "SHARED";
-   public static final String CELL_SQL           = "SQL";
-   public static final String CELL_MARKDOWN      = "MARKDOWN";
+   public static final String CELL_SQL           = CellType.SQL.getPossibleValueId();
+   public static final String CELL_MARKDOWN      = CellType.MARKDOWN.getPossibleValueId();
    public static final int    MAX_CELLS          = 200;
 
    private final SqlWorkbenchRuntime    runtime;

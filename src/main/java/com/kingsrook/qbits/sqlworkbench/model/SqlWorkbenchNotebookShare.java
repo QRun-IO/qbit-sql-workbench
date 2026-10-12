@@ -29,11 +29,18 @@ import com.kingsrook.qqq.backend.core.model.metadata.fields.ValueTooLongBehavior
  ** everyone with workbench access (audienceType ALL - the shared library).
  ** audienceKey ("user:alice", "group:analysts", "all") is computed by the
  ** table customizer and is what the record security locks match against the
- ** session's sqlWorkbenchAudience key values.
+ ** session's sql_workbench_audience key values.
  *******************************************************************************/
 public class SqlWorkbenchNotebookShare extends QRecordEntity
 {
-   public static final String TABLE_NAME = "sqlWorkbenchNotebookShare";
+   public static final String TABLE_NAME = "sql_workbench_notebook_share";
+
+   /*******************************************************************************
+    ** The table name before 1.0.0-RC.3 (owner rule: lowercase snake_case,
+    ** prefixed with the qbit name). Kept for migrating stored references only.
+    *******************************************************************************/
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_TABLE_NAME = "sqlWorkbenchNotebookShare";
 
    @QField(isEditable = false, isPrimaryKey = true)
    private Integer id;

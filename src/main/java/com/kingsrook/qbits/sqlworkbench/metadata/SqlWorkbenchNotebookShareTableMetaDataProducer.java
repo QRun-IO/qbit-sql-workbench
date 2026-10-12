@@ -25,7 +25,7 @@ import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 
 
 /*******************************************************************************
- ** Produces the sqlWorkbenchNotebookShare table.
+ ** Produces the sql_workbench_notebook_share table.
  *******************************************************************************/
 public class SqlWorkbenchNotebookShareTableMetaDataProducer extends QBitComponentMetaDataProducer<QTableMetaData, SqlWorkbenchQBitConfig>
 {

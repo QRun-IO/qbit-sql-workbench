@@ -53,6 +53,7 @@ import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunProcessInput;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunProcessOutput;
+import com.kingsrook.qqq.backend.core.model.actions.reporting.ReportFormat;
 import com.kingsrook.qqq.backend.core.model.actions.tables.count.CountInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteOutput;
@@ -86,7 +87,6 @@ import com.kingsrook.qqq.middleware.javalin.executors.io.TableQueryInput;
 import com.kingsrook.qqq.middleware.javalin.executors.io.TableQueryOutputInterface;
 import com.kingsrook.qqq.middleware.javalin.executors.io.TableUpdateInput;
 import com.kingsrook.qqq.middleware.javalin.executors.io.TableUpdateOutputInterface;
-import com.kingsrook.qqq.backend.core.model.actions.reporting.ReportFormat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -991,4 +991,38 @@ class TableSecurityMatrixTest extends BaseSqlWorkbenchTest
       static final List<String> ALL = List.of(SqlWorkbenchNotebook.TABLE_NAME, SqlWorkbenchCell.TABLE_NAME, SqlWorkbenchNotebookVersion.TABLE_NAME,
          SqlWorkbenchResultSnapshot.TABLE_NAME, SqlWorkbenchNotebookShare.TABLE_NAME, SqlWorkbenchExecution.TABLE_NAME);
    }
+
+   /*******************************************************************************
+    ** Both insert and update paths reject backend text outside the live PVS.
+    *******************************************************************************/
+   @Test
+   void testBackendSelectionValidation() throws Exception
+   {
+      login(OWNER);
+      Integer notebookId = ids.get("Private");
+      for(String invalid : List.of("unknown", "", BACKEND_NAME))
+      {
+         config.setExcludedBackendNames(invalid.equals(BACKEND_NAME) ? List.of(BACKEND_NAME) : List.of());
+         QRecord notebook = new InsertAction().execute(new InsertInput(SqlWorkbenchNotebook.TABLE_NAME)
+            .withRecord(new QRecord().withValue("title", "Invalid backend").withValue("defaultBackendName", invalid))).getRecords().get(0);
+         assertThat(notebook.getErrors()).isNotEmpty();
+         QRecord changed = new UpdateAction().execute(new UpdateInput(SqlWorkbenchNotebook.TABLE_NAME)
+            .withRecord(new QRecord().withValue("id", notebookId).withValue("defaultBackendName", invalid))).getRecords().get(0);
+         assertThat(changed.getErrors()).isNotEmpty();
+         QRecord cell = new InsertAction().execute(new InsertInput(SqlWorkbenchCell.TABLE_NAME)
+            .withRecord(new QRecord().withValue("notebookId", notebookId).withValue("backendName", invalid))).getRecords().get(0);
+         assertThat(cell.getErrors()).isNotEmpty();
+         Integer cellId = QueryAction.execute(SqlWorkbenchCell.TABLE_NAME,
+            new QQueryFilter(new QFilterCriteria("notebookId", QCriteriaOperator.EQUALS, notebookId))).get(0).getValueInteger("id");
+         QRecord changedCell = new UpdateAction().execute(new UpdateInput(SqlWorkbenchCell.TABLE_NAME)
+            .withRecord(new QRecord().withValue("id", cellId).withValue("backendName", invalid))).getRecords().get(0);
+         assertThat(changedCell.getErrors()).isNotEmpty();
+      }
+      config.setExcludedBackendNames(List.of());
+      QRecord valid = new InsertAction().execute(new InsertInput(SqlWorkbenchCell.TABLE_NAME)
+         .withRecord(new QRecord().withValue("notebookId", notebookId).withValue("backendName", BACKEND_NAME))).getRecords().get(0);
+      assertThat(valid.getErrors()).isNullOrEmpty();
+      assertThat(valid.getValueString("cellKey")).isNotBlank();
+   }
+
 }

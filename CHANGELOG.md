@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog; versions follow semantic versioning.
 
+## [1.0.0-RC.3] - Unreleased
+
+### Added
+- **App home dashboard.** The `sqlWorkbench` app's home is now an information dashboard of real data, read in the viewer's session (permissions and record locks apply): summary tiles and links, runs per day, recent notebooks, recent runs, slowest and failed queries, most-used notebooks, shared notebooks, committed writes, and (workbench admins only) activity by user. Each widget has an honest empty state.
+- **Runner.** The notebook editor (`SQL_WORKBENCH` widget) moves to its own nav entry: the `sqlWorkbenchRunner` child app, labeled Runner. Open a notebook with `/app/sqlWorkbenchRunner?notebook=<id>`.
+- On a notebook's record view: an Open in Runner widget, and a Runs child list (its executions the viewer may see) through the new join `sql_workbench_notebook_join_sql_workbench_execution`.
+- `SqlWorkbenchIntegrations`: opt-in ESB (`esbTableNames`) and Quick Search (`quickSearchTables`) hooks for the main tables, with no dependency on either module.
+- **Record developer panel** "SQL Workbench" (`SqlWorkbenchDeveloperPanelProvider`, registered by `SqlWorkbenchDeveloperPanelsMetaDataProducer`): read-only `SELECT`s for the record and its table in the backend's own names, backend details, and links that open them in the Runner as a new cell (`/app/sqlWorkbenchRunner?sql=&backend=`, never run). Requires QQQ 4.1.0-RC.4 (the developer panel contract) and a Next UI with the Runner `?sql=` support.
+
+### Changed
+- **The nav lists only the main tables**: Notebooks and the execution audit, after the Runner. Cells, versions, pinned results and shares are child lists on a notebook (still standard tables, reachable by URL and API). The app's widget list is now the dashboard, not the `SQL_WORKBENCH` widget; links to `/app/sqlWorkbench` that expected the editor should point at `/app/sqlWorkbenchRunner`.
+- The notebook record's header shows the description.
+- **Names follow the owner rule: lowercase snake_case, prefixed with the qbit's name (metadata only, no DDL).** Tables `sql_workbench_notebook`, `sql_workbench_cell`, `sql_workbench_notebook_version`, `sql_workbench_result_snapshot`, `sql_workbench_notebook_share`, `sql_workbench_execution` (they now equal their backend table names); possible-value source `sql_workbench_share_audience_type`; permissions `sql_workbench.*`, `sql_workbench_admin.hasAccess` and `<table>.read` etc.; security key types `sql_workbench_user` (all-access `sql_workbench_all_access`) and `sql_workbench_audience`; joins `sql_workbench_notebook_join_sql_workbench_*`.
+- `tableNamePrefix` (and the QBit namespace) is normalized to lowercase snake_case and joined with one `_`.
+
+### Deprecated
+- `LEGACY_TABLE_NAME` on each entity, `ShareAudienceType.LEGACY_NAME` and `SqlWorkbenchQBitConfig.LEGACY_*` hold the pre-RC.3 names, for migrating stored references only.
+
+### Upgrade from RC.2
+- Follow [UPGRADE.md](UPGRADE.md): grant the renamed permissions and rename stored table names (audit, saved views and reports). No DDL.
+
 ## [1.0.0-RC.2] - Unreleased
 
 The workbench's data becomes standard QQQ tables, secured by QQQ's own mechanisms instead of being hidden ([#3](https://github.com/QRun-IO/qbit-sql-workbench/issues/3)). Requires QQQ `4.1.0-RC.4` or later ([qqq#1073](https://github.com/QRun-IO/qqq/issues/1073)).

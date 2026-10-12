@@ -19,11 +19,16 @@ package com.kingsrook.qbits.sqlworkbench.metadata;
 
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchSecurity;
+import com.kingsrook.qbits.sqlworkbench.model.CellType;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaDataInterface;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.core.model.metadata.joins.QJoinMetaData;
+import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValueSource;
+import com.kingsrook.qqq.backend.core.model.metadata.possiblevalues.QPossibleValueSourceType;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitComponentMetaDataProducer;
 import com.kingsrook.qqq.backend.core.model.metadata.security.QSecurityKeyType;
 
@@ -49,6 +54,10 @@ public class SqlWorkbenchSecurityAndJoinsMetaDataProducer extends QBitComponentM
          output.add(keyType);
       }
       output.add(SqlWorkbenchTableMetaDataHelper.buildAudienceTypePossibleValueSource(config));
+      output.add(QPossibleValueSource.newForEnum(config.applyPrefix(CellType.NAME), CellType.values()));
+      output.add(new QPossibleValueSource().withName(config.applyPrefix(WorkbenchBackendPossibleValueProvider.NAME))
+         .withType(QPossibleValueSourceType.CUSTOM).withIdType(QFieldType.STRING)
+         .withCustomCodeReference(new QCodeReference(WorkbenchBackendPossibleValueProvider.class)));
       for(QJoinMetaData join : SqlWorkbenchTableMetaDataHelper.buildJoins(config))
       {
          output.add(join);

@@ -30,7 +30,13 @@ public enum ShareAudienceType implements PossibleValueEnum<String>
    GROUP("Group", "group"),
    ALL("Everyone (shared library)", "all");
 
-   public static final String NAME = "sqlWorkbenchShareAudienceType";
+   public static final String NAME = "sql_workbench_share_audience_type";
+
+   /*******************************************************************************
+    ** The possible-value source name before 1.0.0-RC.3.
+    *******************************************************************************/
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_NAME = "sqlWorkbenchShareAudienceType";
 
    private final String label;
    private final String keyPrefix;
