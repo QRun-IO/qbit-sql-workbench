@@ -18,26 +18,42 @@ package com.kingsrook.qbits.sqlworkbench.notebook;
 
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
+import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
+import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchSecurity;
+import com.kingsrook.qbits.sqlworkbench.customizers.SqlWorkbenchActionFlag;
+import com.kingsrook.qbits.sqlworkbench.engine.Caller;
+import com.kingsrook.qbits.sqlworkbench.engine.CollectedResult;
+import com.kingsrook.qbits.sqlworkbench.engine.ColumnInfo;
+import com.kingsrook.qbits.sqlworkbench.engine.ResultCache;
+import com.kingsrook.qbits.sqlworkbench.model.ShareAudienceType;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookVersion;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
 import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.actions.tables.UpdateAction;
+import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QBadRequestException;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.exceptions.QNotFoundException;
 import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteOutput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertOutput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
@@ -46,39 +62,28 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateOutput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
 import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
-import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
-import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
-import com.kingsrook.qbits.sqlworkbench.SystemUser;
-import com.kingsrook.qbits.sqlworkbench.engine.Caller;
-import com.kingsrook.qbits.sqlworkbench.engine.CollectedResult;
-import com.kingsrook.qbits.sqlworkbench.engine.ColumnInfo;
-import com.kingsrook.qbits.sqlworkbench.engine.ResultCache;
-import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
-import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
-import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookVersion;
-import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
 
 
 /*******************************************************************************
- ** Notebooks, their cells, versions and pinned result snapshots.
+ ** Notebooks, their cells, versions, pinned result snapshots and shares, for
+ ** the notebook UI.
  **
- ** Visibility: a caller reads their own notebooks and every SHARED one; only
- ** the owner edits, deletes, restores and pins; publishing needs the share
- ** permission and ownership; anyone with access can duplicate what they can
- ** read.
+ ** Everything here runs as the caller's own session through the standard
+ ** QQQ table actions, so the same record locks and table customizers apply
+ ** as for the table UI and the /qqq/v1 table API: a caller reads their own
+ ** notebooks and the ones shared with them (a user / group share, or the
+ ** shared library), and only the owner changes one. The explicit checks
+ ** (readable / owned / canShare) stay as defense in depth and to give the
+ ** notebook UI its 404 / 403 answers. Only version bookkeeping runs as the
+ ** system user (NotebookVersioning), because versions are append-only.
  **
- ** These checks are the boundary: the tables themselves are guarded by the
- ** admin permission (sqlWorkbenchAdmin.hasAccess), which ordinary users do
- ** not hold, so the generic QQQ table UI / API cannot reach other users'
- ** notebooks. Every read and write here runs as the system user (SystemUser)
- ** and every public method checks the Caller first (readable / owned /
- ** canShare) before it reads content or writes anything.
- **
- ** Saves replace a notebook's cells and append a version (full JSON), in one
- ** transaction; versions beyond notebookVersionRetention are pruned.
+ ** Saves replace a notebook's cells and append one version (full JSON), in
+ ** one transaction; versions beyond notebookVersionRetention are pruned.
  *******************************************************************************/
 public class NotebookService
 {
@@ -115,24 +120,46 @@ public class NotebookService
 
 
    /*******************************************************************************
-    ** Notebook summaries: scope "mine" (default) or "shared".
+    ** Make sure the session carries the workbench keys (hosts normally apply
+    ** them at login, with groups).
+    *******************************************************************************/
+   private void prepare()
+   {
+      SqlWorkbenchSecurity.ensureSessionKeys(config, QContext.getQSession());
+   }
+
+
+
+   /*******************************************************************************
+    ** Notebook summaries: scope "mine" (default) or "shared" (shared with the
+    ** caller - directly, through a group, or in the library - and not theirs).
     *******************************************************************************/
    public List<Map<String, Object>> list(String scope, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
+      prepare();
+      QQueryFilter filter;
+      if("shared".equalsIgnoreCase(scope))
       {
-         QQueryFilter filter = "shared".equalsIgnoreCase(scope)
-            ? new QQueryFilter(new QFilterCriteria("visibility", QCriteriaOperator.EQUALS, VISIBILITY_SHARED))
-            : new QQueryFilter(new QFilterCriteria("ownerUserId", QCriteriaOperator.EQUALS, caller.userId()));
-         filter.withOrderBy(new QFilterOrderBy("modifyDate", false)).withLimit(500);
-
-         List<Map<String, Object>> result = new ArrayList<>();
-         for(QRecord record : QueryAction.execute(table(SqlWorkbenchNotebook.TABLE_NAME), filter))
+         Set<Serializable> ids = sharedWithCallerNotebookIds();
+         if(ids.isEmpty())
          {
-            result.add(summary(new SqlWorkbenchNotebook(record), caller));
+            return (new ArrayList<>());
          }
-         return (result);
-      }));
+         filter = new QQueryFilter(new QFilterCriteria("id", QCriteriaOperator.IN, new ArrayList<>(ids)))
+            .withCriteria(new QFilterCriteria("ownerUserId", QCriteriaOperator.NOT_EQUALS, caller.userId()));
+      }
+      else
+      {
+         filter = new QQueryFilter(new QFilterCriteria("ownerUserId", QCriteriaOperator.EQUALS, caller.userId()));
+      }
+      filter.withOrderBy(new QFilterOrderBy("modifyDate", false)).withLimit(500);
+
+      List<Map<String, Object>> result = new ArrayList<>();
+      for(QRecord record : QueryAction.execute(table(SqlWorkbenchNotebook.TABLE_NAME), filter))
+      {
+         result.add(summary(new SqlWorkbenchNotebook(record), caller));
+      }
+      return (result);
    }
 
 
@@ -142,46 +169,38 @@ public class NotebookService
     *******************************************************************************/
    public Map<String, Object> get(Integer id, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
-      {
-         SqlWorkbenchNotebook notebook = readable(id, caller);
-         Map<String, Object>  view     = summary(notebook, caller);
-         view.put("parameters", parseParameters(notebook.getParametersJson()));
-         view.put("cells", cells(notebook.getId()).stream().map(NotebookService::cellView).toList());
-         return (view);
-      }));
+      prepare();
+      SqlWorkbenchNotebook notebook = readable(id, caller);
+      Map<String, Object>  view     = summary(notebook, caller);
+      view.put("parameters", parseParameters(notebook.getParametersJson()));
+      view.put("cells", NotebookVersioning.cells(config, notebook.getId(), null).stream().map(NotebookService::cellView).toList());
+      return (view);
    }
 
 
 
    /*******************************************************************************
-    ** Create a personal notebook (version 1).
+    ** Create a personal notebook (version 1). The table customizer makes the
+    ** caller its owner.
     *******************************************************************************/
    public Map<String, Object> create(Map<String, Object> body, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
+      prepare();
+      SqlWorkbenchNotebook notebook = new SqlWorkbenchNotebook();
+      applyFields(notebook, body, true);
+      List<SqlWorkbenchCell> cells = parseCells(body.get("cells"));
+      try(QBackendTransaction transaction = QBackendTransaction.openFor(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME))))
       {
-         Instant now = runtime.getClock().instant();
-         SqlWorkbenchNotebook notebook = new SqlWorkbenchNotebook()
-            .withOwnerUserId(caller.userId())
-            .withOwnerName(caller.userName())
-            .withVisibility(VISIBILITY_PERSONAL)
-            .withCurrentVersion(0)
-            .withCreateDate(now);
-         applyFields(notebook, body, true);
-         List<SqlWorkbenchCell> cells = parseCells(body.get("cells"));
-
-         try(QBackendTransaction transaction = QBackendTransaction.openFor(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME))))
-         {
-            notebook.setModifyDate(now);
-            InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME)).withRecordEntity(notebook).withTransaction(transaction));
-            throwIfErrors(output.getRecords().get(0));
-            notebook.setId(output.getRecords().get(0).getValueInteger("id"));
-            saveContent(notebook, cells, caller, (String) body.get("comment"), transaction);
-            commit(transaction);
-         }
-         return (get(notebook.getId(), caller));
-      }));
+         InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME))
+            .withFlag(SqlWorkbenchActionFlag.NOTEBOOK_SAVE)
+            .withRecordEntity(notebook)
+            .withTransaction(transaction));
+         throwIfErrors(output.getRecords().get(0));
+         notebook.setId(output.getRecords().get(0).getValueInteger("id"));
+         saveContent(notebook, cells, (String) body.get("comment"), transaction);
+         commit(transaction);
+      }
+      return (get(notebook.getId(), caller));
    }
 
 
@@ -191,64 +210,64 @@ public class NotebookService
     *******************************************************************************/
    public Map<String, Object> update(Integer id, Map<String, Object> body, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
+      prepare();
+      SqlWorkbenchNotebook notebook = owned(id, caller);
+      applyFields(notebook, body, false);
+      List<SqlWorkbenchCell> cells = body.containsKey("cells") ? parseCells(body.get("cells")) : NotebookVersioning.cells(config, id, null);
+      try(QBackendTransaction transaction = QBackendTransaction.openFor(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME))))
       {
-         SqlWorkbenchNotebook notebook = owned(id, caller);
-         applyFields(notebook, body, false);
-         List<SqlWorkbenchCell> cells = body.containsKey("cells") ? parseCells(body.get("cells")) : cells(id);
-
-         try(QBackendTransaction transaction = QBackendTransaction.openFor(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME))))
-         {
-            saveContent(notebook, cells, caller, (String) body.get("comment"), transaction);
-            commit(transaction);
-         }
-         pruneVersions(id);
-         return (get(id, caller));
-      }));
+         saveContent(notebook, cells, (String) body.get("comment"), transaction);
+         commit(transaction);
+      }
+      return (get(id, caller));
    }
 
 
 
    /*******************************************************************************
-    ** Delete a notebook and everything under it.
+    ** Delete a notebook; its table customizer deletes everything under it.
     *******************************************************************************/
    public void delete(Integer id, Caller caller) throws QException
    {
-      SystemUser.run(() ->
+      prepare();
+      owned(id, caller);
+      try(QBackendTransaction transaction = QBackendTransaction.openFor(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME))))
       {
-         owned(id, caller);
-         try(QBackendTransaction transaction = QBackendTransaction.openFor(new InsertInput(table(SqlWorkbenchNotebook.TABLE_NAME))))
-         {
-            for(String child : List.of(SqlWorkbenchCell.TABLE_NAME, SqlWorkbenchNotebookVersion.TABLE_NAME, SqlWorkbenchResultSnapshot.TABLE_NAME))
-            {
-               new DeleteAction().execute(new DeleteInput(table(child)).withQueryFilter(byNotebook(id)).withTransaction(transaction));
-            }
-            new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchNotebook.TABLE_NAME)).withPrimaryKeys(List.of(id)).withTransaction(transaction));
-            commit(transaction);
-         }
-      });
+         DeleteOutput output = new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchNotebook.TABLE_NAME)).withPrimaryKeys(List.of(id)).withTransaction(transaction));
+         throwIfErrors(output.getRecordsWithErrors());
+         commit(transaction);
+      }
    }
 
 
 
    /*******************************************************************************
-    ** Publish to (or withdraw from) the shared library.
+    ** Publish to (or withdraw from) the shared library: an ALL share row.
     *******************************************************************************/
    public Map<String, Object> publish(Integer id, boolean shared, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
+      prepare();
+      if(!caller.canShare())
       {
-         if(!caller.canShare())
-         {
-            throw (new QPermissionDeniedException("Publishing to the shared library needs the " + config.getSharePermissionName() + " permission."));
-         }
-         SqlWorkbenchNotebook notebook = owned(id, caller);
-         new UpdateAction().execute(new UpdateInput(table(SqlWorkbenchNotebook.TABLE_NAME)).withRecord(new QRecord()
-            .withValue("id", notebook.getId())
-            .withValue("visibility", shared ? VISIBILITY_SHARED : VISIBILITY_PERSONAL)
-            .withValue("modifyDate", runtime.getClock().instant())));
-         return (get(id, caller));
-      }));
+         throw (new QPermissionDeniedException("Publishing to the shared library needs the " + config.getSharePermissionName() + " permission."));
+      }
+      owned(id, caller);
+
+      QQueryFilter libraryShare = byNotebook(id).withCriteria(new QFilterCriteria("audienceKey", QCriteriaOperator.EQUALS, SqlWorkbenchSecurity.AUDIENCE_ALL));
+      boolean      published    = !QueryAction.execute(table(SqlWorkbenchNotebookShare.TABLE_NAME), libraryShare).isEmpty();
+      if(shared && !published)
+      {
+         InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchNotebookShare.TABLE_NAME)).withRecordEntity(new SqlWorkbenchNotebookShare()
+            .withNotebookId(id)
+            .withAudienceType(ShareAudienceType.ALL.name())));
+         throwIfErrors(output.getRecords().get(0));
+      }
+      else if(!shared && published)
+      {
+         DeleteOutput output = new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchNotebookShare.TABLE_NAME)).withQueryFilter(libraryShare));
+         throwIfErrors(output.getRecordsWithErrors());
+      }
+      return (get(id, caller));
    }
 
 
@@ -258,25 +277,23 @@ public class NotebookService
     *******************************************************************************/
    public Map<String, Object> duplicate(Integer id, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
+      prepare();
+      SqlWorkbenchNotebook source = readable(id, caller);
+      Map<String, Object>  body   = new LinkedHashMap<>();
+      body.put("title", truncate("Copy of " + source.getTitle(), 255));
+      body.put("description", source.getDescription());
+      body.put("defaultBackendName", source.getDefaultBackendName());
+      body.put("parameters", parseParameters(source.getParametersJson()));
+      List<Map<String, Object>> cells = new ArrayList<>();
+      for(SqlWorkbenchCell cell : NotebookVersioning.cells(config, id, null))
       {
-         SqlWorkbenchNotebook source = readable(id, caller);
-         Map<String, Object>  body   = new LinkedHashMap<>();
-         body.put("title", truncate("Copy of " + source.getTitle(), 255));
-         body.put("description", source.getDescription());
-         body.put("defaultBackendName", source.getDefaultBackendName());
-         body.put("parameters", parseParameters(source.getParametersJson()));
-         List<Map<String, Object>> cells = new ArrayList<>();
-         for(SqlWorkbenchCell cell : cells(id))
-         {
-            Map<String, Object> view = cellView(cell);
-            view.put("cellKey", UUID.randomUUID().toString());
-            cells.add(view);
-         }
-         body.put("cells", cells);
-         body.put("comment", "Duplicated from notebook " + id);
-         return (create(body, caller));
-      }));
+         Map<String, Object> view = cellView(cell);
+         view.put("cellKey", UUID.randomUUID().toString());
+         cells.add(view);
+      }
+      body.put("cells", cells);
+      body.put("comment", "Duplicated from notebook " + id);
+      return (create(body, caller));
    }
 
 
@@ -286,23 +303,21 @@ public class NotebookService
     *******************************************************************************/
    public List<Map<String, Object>> versions(Integer id, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
+      prepare();
+      readable(id, caller);
+      QQueryFilter              filter = byNotebook(id).withOrderBy(new QFilterOrderBy("versionNumber", false));
+      List<Map<String, Object>> result = new ArrayList<>();
+      for(QRecord record : QueryAction.execute(table(SqlWorkbenchNotebookVersion.TABLE_NAME), filter))
       {
-         readable(id, caller);
-         QQueryFilter filter = byNotebook(id).withOrderBy(new QFilterOrderBy("versionNumber", false));
-         List<Map<String, Object>> result = new ArrayList<>();
-         for(QRecord record : QueryAction.execute(table(SqlWorkbenchNotebookVersion.TABLE_NAME), filter))
-         {
-            SqlWorkbenchNotebookVersion version = new SqlWorkbenchNotebookVersion(record);
-            Map<String, Object>         view    = new LinkedHashMap<>();
-            view.put("versionNumber", version.getVersionNumber());
-            view.put("savedByName", version.getSavedByName());
-            view.put("comment", version.getComment());
-            view.put("createDate", String.valueOf(version.getCreateDate()));
-            result.add(view);
-         }
-         return (result);
-      }));
+         SqlWorkbenchNotebookVersion version = new SqlWorkbenchNotebookVersion(record);
+         Map<String, Object>         view    = new LinkedHashMap<>();
+         view.put("versionNumber", version.getVersionNumber());
+         view.put("savedByName", version.getSavedByName());
+         view.put("comment", version.getComment());
+         view.put("createDate", String.valueOf(version.getCreateDate()));
+         result.add(view);
+      }
+      return (result);
    }
 
 
@@ -312,18 +327,16 @@ public class NotebookService
     *******************************************************************************/
    public Map<String, Object> version(Integer id, Integer versionNumber, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
-      {
-         readable(id, caller);
-         SqlWorkbenchNotebookVersion version = findVersion(id, versionNumber);
-         Map<String, Object>         view    = new LinkedHashMap<>();
-         view.put("versionNumber", version.getVersionNumber());
-         view.put("savedByName", version.getSavedByName());
-         view.put("comment", version.getComment());
-         view.put("createDate", String.valueOf(version.getCreateDate()));
-         view.put("notebook", parseJsonObject(version.getContentJson()));
-         return (view);
-      }));
+      prepare();
+      readable(id, caller);
+      SqlWorkbenchNotebookVersion version = findVersion(id, versionNumber);
+      Map<String, Object>         view    = new LinkedHashMap<>();
+      view.put("versionNumber", version.getVersionNumber());
+      view.put("savedByName", version.getSavedByName());
+      view.put("comment", version.getComment());
+      view.put("createDate", String.valueOf(version.getCreateDate()));
+      view.put("notebook", parseJsonObject(version.getContentJson()));
+      return (view);
    }
 
 
@@ -333,14 +346,12 @@ public class NotebookService
     *******************************************************************************/
    public Map<String, Object> restore(Integer id, Integer versionNumber, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
-      {
-         owned(id, caller);
-         Map<String, Object> content = parseJsonObject(findVersion(id, versionNumber).getContentJson());
-         Map<String, Object> body    = new LinkedHashMap<>(content);
-         body.put("comment", "Restored version " + versionNumber);
-         return (update(id, body, caller));
-      }));
+      prepare();
+      owned(id, caller);
+      Map<String, Object> content = parseJsonObject(findVersion(id, versionNumber).getContentJson());
+      Map<String, Object> body    = new LinkedHashMap<>(content);
+      body.put("comment", "Restored version " + versionNumber);
+      return (update(id, body, caller));
    }
 
 
@@ -350,16 +361,14 @@ public class NotebookService
     *******************************************************************************/
    public List<Map<String, Object>> snapshots(Integer id, Caller caller) throws QException
    {
-      return (SystemUser.call(() ->
+      prepare();
+      readable(id, caller);
+      List<Map<String, Object>> result = new ArrayList<>();
+      for(QRecord record : QueryAction.execute(table(SqlWorkbenchResultSnapshot.TABLE_NAME), byNotebook(id).withOrderBy(new QFilterOrderBy("id", false))))
       {
-         readable(id, caller);
-         List<Map<String, Object>> result = new ArrayList<>();
-         for(QRecord record : QueryAction.execute(table(SqlWorkbenchResultSnapshot.TABLE_NAME), byNotebook(id).withOrderBy(new QFilterOrderBy("id", false))))
-         {
-            result.add(snapshotView(new SqlWorkbenchResultSnapshot(record)));
-         }
-         return (result);
-      }));
+         result.add(snapshotView(new SqlWorkbenchResultSnapshot(record)));
+      }
+      return (result);
    }
 
 
@@ -369,38 +378,35 @@ public class NotebookService
     *******************************************************************************/
    public Map<String, Object> createSnapshot(Integer id, Map<String, Object> body, Caller caller, String sqlText) throws QException
    {
-      return (SystemUser.call(() ->
-      {
-         owned(id, caller);
-         String executionUuid = (String) body.get("executionUuid");
-         ResultCache.Entry entry = runtime.getResultCache().get(executionUuid, caller.userId())
-            .orElseThrow(() -> new QNotFoundException("That result is no longer available; run the cell again, then pin it."));
-
-         CollectedResult    result  = entry.result();
-         int                max     = config.getSnapshotMaxRows();
-         List<List<Object>> rows    = result.rows().size() > max ? result.rows().subList(0, max) : result.rows();
-         Map<String, Object> json   = new LinkedHashMap<>();
-         json.put("columns", result.columns().stream().map(ColumnInfo::toMap).toList());
-         json.put("rows", rows);
-
-         SqlWorkbenchResultSnapshot snapshot = new SqlWorkbenchResultSnapshot()
-            .withNotebookId(id)
-            .withCellKey((String) body.get("cellKey"))
-            .withExecutionUuid(executionUuid)
-            .withLabel(truncate((String) body.get("label"), 255))
-            .withBackendName(entry.backendName())
-            .withSqlText(sqlText)
-            .withResultJson(JsonUtils.toJson(json))
-            .withRowCount(rows.size())
-            .withTruncated(result.truncated() || result.rows().size() > max)
-            .withCreatedByUserId(caller.userId())
-            .withCreateDate(runtime.getClock().instant());
-
-         InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchResultSnapshot.TABLE_NAME)).withRecordEntity(snapshot));
-         throwIfErrors(output.getRecords().get(0));
-         snapshot.setId(output.getRecords().get(0).getValueInteger("id"));
-         return (snapshotView(snapshot));
-      }));
+      prepare();
+      owned(id, caller);
+      String executionUuid = (String) body.get("executionUuid");
+      ResultCache.Entry entry = runtime.getResultCache().get(executionUuid, caller.userId())
+         .orElseThrow(() -> new QNotFoundException("That result is no longer available; run the cell again, then pin it."));
+      CollectedResult     result = entry.result();
+      int                 max    = config.getSnapshotMaxRows();
+      List<List<Object>>  rows   = result.rows().size() > max ? result.rows().subList(0, max) : result.rows();
+      Map<String, Object> json   = new LinkedHashMap<>();
+      json.put("columns", result.columns().stream().map(ColumnInfo::toMap).toList());
+      json.put("rows", rows);
+      SqlWorkbenchResultSnapshot snapshot = new SqlWorkbenchResultSnapshot()
+         .withNotebookId(id)
+         .withCellKey((String) body.get("cellKey"))
+         .withExecutionUuid(executionUuid)
+         .withLabel(truncate((String) body.get("label"), 255))
+         .withBackendName(entry.backendName())
+         .withSqlText(sqlText)
+         .withResultJson(JsonUtils.toJson(json))
+         .withRowCount(rows.size())
+         .withTruncated(result.truncated() || result.rows().size() > max)
+         .withCreatedByUserId(caller.userId())
+         .withCreateDate(runtime.getClock().instant());
+      InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchResultSnapshot.TABLE_NAME))
+         .withFlag(SqlWorkbenchActionFlag.SNAPSHOT_PIN)
+         .withRecordEntity(snapshot));
+      throwIfErrors(output.getRecords().get(0));
+      snapshot.setId(output.getRecords().get(0).getValueInteger("id"));
+      return (snapshotView(snapshot));
    }
 
 
@@ -410,28 +416,33 @@ public class NotebookService
     *******************************************************************************/
    public void deleteSnapshot(Integer id, Integer snapshotId, Caller caller) throws QException
    {
-      SystemUser.run(() ->
+      prepare();
+      owned(id, caller);
+      QQueryFilter filter = byNotebook(id).withCriteria(new QFilterCriteria("id", QCriteriaOperator.EQUALS, snapshotId));
+      if(QueryAction.execute(table(SqlWorkbenchResultSnapshot.TABLE_NAME), filter).isEmpty())
       {
-         owned(id, caller);
-         QQueryFilter filter = byNotebook(id).withCriteria(new QFilterCriteria("id", QCriteriaOperator.EQUALS, snapshotId));
-         if(QueryAction.execute(table(SqlWorkbenchResultSnapshot.TABLE_NAME), filter).isEmpty())
-         {
-            throw (new QNotFoundException("Snapshot not found."));
-         }
-         new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchResultSnapshot.TABLE_NAME)).withPrimaryKeys(List.of(snapshotId)));
-      });
+         throw (new QNotFoundException("Snapshot not found."));
+      }
+      DeleteOutput output = new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchResultSnapshot.TABLE_NAME)).withPrimaryKeys(List.of(snapshotId)));
+      throwIfErrors(output.getRecordsWithErrors());
    }
 
 
 
    /*******************************************************************************
-    ** A notebook the caller may read, or 404 (never 403: personal notebooks of
-    ** others do not exist for the caller).
+    ** A notebook the caller may read, or 404 (never 403: notebooks not shared
+    ** with the caller do not exist for them). The record locks already hide
+    ** them; the owner / share check repeats that decision explicitly.
     *******************************************************************************/
    SqlWorkbenchNotebook readable(Integer id, Caller caller) throws QException
    {
       SqlWorkbenchNotebook notebook = find(id);
-      if(notebook == null || !(Objects.equals(notebook.getOwnerUserId(), caller.userId()) || VISIBILITY_SHARED.equals(notebook.getVisibility())))
+      if(notebook == null)
+      {
+         throw (new QNotFoundException("Notebook not found."));
+      }
+      boolean owner = Objects.equals(notebook.getOwnerUserId(), caller.userId());
+      if(!owner && !SqlWorkbenchSecurity.hasAllAccess(config) && !sharedWithCallerNotebookIds().contains(notebook.getId()))
       {
          throw (new QNotFoundException("Notebook not found."));
       }
@@ -441,7 +452,7 @@ public class NotebookService
 
 
    /*******************************************************************************
-    ** A notebook the caller owns: 404 if unreadable, 403 if shared but not
+    ** A notebook the caller owns: 404 if unreadable, 403 if readable but not
     ** theirs.
     *******************************************************************************/
    SqlWorkbenchNotebook owned(Integer id, Caller caller) throws QException
@@ -457,33 +468,37 @@ public class NotebookService
 
 
    /*******************************************************************************
-    **
+    ** The notebook, as the caller's session can see it (or null).
     *******************************************************************************/
    private SqlWorkbenchNotebook find(Integer id) throws QException
    {
-      return (SystemUser.call(() ->
+      if(id == null)
       {
-         if(id == null)
-         {
-            throw (new QBadRequestException("A notebook id is required."));
-         }
-         List<QRecord> records = QueryAction.execute(table(SqlWorkbenchNotebook.TABLE_NAME), new QQueryFilter(new QFilterCriteria("id", QCriteriaOperator.EQUALS, id)));
-         return (records.isEmpty() ? null : new SqlWorkbenchNotebook(records.get(0)));
-      }));
+         throw (new QBadRequestException("A notebook id is required."));
+      }
+      List<QRecord> records = QueryAction.execute(table(SqlWorkbenchNotebook.TABLE_NAME), new QQueryFilter(new QFilterCriteria("id", QCriteriaOperator.EQUALS, id)));
+      return (records.isEmpty() ? null : new SqlWorkbenchNotebook(records.get(0)));
    }
 
 
 
    /*******************************************************************************
-    **
+    ** Ids of the notebooks shared with one of the session's audiences.
     *******************************************************************************/
-   private List<SqlWorkbenchCell> cells(Integer notebookId) throws QException
+   private Set<Serializable> sharedWithCallerNotebookIds() throws QException
    {
-      return (SystemUser.call(() ->
+      Set<Serializable> ids          = new LinkedHashSet<>();
+      List<String>      audienceKeys = SqlWorkbenchSecurity.sessionAudienceKeys(config);
+      if(audienceKeys.isEmpty())
       {
-         QQueryFilter filter = byNotebook(notebookId).withOrderBy(new QFilterOrderBy("sortOrder")).withOrderBy(new QFilterOrderBy("id"));
-         return (QueryAction.execute(table(SqlWorkbenchCell.TABLE_NAME), SqlWorkbenchCell.class, filter));
-      }));
+         return (ids);
+      }
+      QQueryFilter filter = new QQueryFilter(new QFilterCriteria("audienceKey", QCriteriaOperator.IN, new ArrayList<>(audienceKeys)));
+      for(QRecord record : QueryAction.execute(table(SqlWorkbenchNotebookShare.TABLE_NAME), filter))
+      {
+         ids.add(record.getValueInteger("notebookId"));
+      }
+      return (ids);
    }
 
 
@@ -493,16 +508,13 @@ public class NotebookService
     *******************************************************************************/
    private SqlWorkbenchNotebookVersion findVersion(Integer id, Integer versionNumber) throws QException
    {
-      return (SystemUser.call(() ->
+      QQueryFilter  filter  = byNotebook(id).withCriteria(new QFilterCriteria("versionNumber", QCriteriaOperator.EQUALS, versionNumber));
+      List<QRecord> records = QueryAction.execute(table(SqlWorkbenchNotebookVersion.TABLE_NAME), filter);
+      if(records.isEmpty())
       {
-         QQueryFilter filter = byNotebook(id).withCriteria(new QFilterCriteria("versionNumber", QCriteriaOperator.EQUALS, versionNumber));
-         List<QRecord> records = QueryAction.execute(table(SqlWorkbenchNotebookVersion.TABLE_NAME), filter);
-         if(records.isEmpty())
-         {
-            throw (new QNotFoundException("Version not found."));
-         }
-         return (new SqlWorkbenchNotebookVersion(records.get(0)));
-      }));
+         throw (new QNotFoundException("Version not found."));
+      }
+      return (new SqlWorkbenchNotebookVersion(records.get(0)));
    }
 
 
@@ -518,81 +530,46 @@ public class NotebookService
 
 
    /*******************************************************************************
-    ** Write the notebook row (version + 1), replace its cells, append a
-    ** version - all in the given transaction.
+    ** Write the notebook's fields, replace its cells, append a version - all
+    ** in the given transaction, as the caller (NOTEBOOK_SAVE tells the table
+    ** customizers this is one save, versioned once at the end).
     *******************************************************************************/
-   private void saveContent(SqlWorkbenchNotebook notebook, List<SqlWorkbenchCell> cells, Caller caller, String comment, QBackendTransaction transaction) throws QException
+   private void saveContent(SqlWorkbenchNotebook notebook, List<SqlWorkbenchCell> cells, String comment, QBackendTransaction transaction) throws QException
    {
-      Instant now     = runtime.getClock().instant();
-      int     version = (notebook.getCurrentVersion() == null ? 0 : notebook.getCurrentVersion()) + 1;
-      notebook.setCurrentVersion(version);
-      notebook.setModifyDate(now);
+      UpdateOutput updated = new UpdateAction().execute(new UpdateInput(table(SqlWorkbenchNotebook.TABLE_NAME))
+         .withFlag(SqlWorkbenchActionFlag.NOTEBOOK_SAVE)
+         .withTransaction(transaction)
+         .withRecord(new QRecord()
+            .withValue("id", notebook.getId())
+            .withValue("title", notebook.getTitle())
+            .withValue("description", notebook.getDescription())
+            .withValue("defaultBackendName", notebook.getDefaultBackendName())
+            .withValue("parametersJson", notebook.getParametersJson())));
+      throwIfErrors(updated.getRecords().get(0));
 
-      new UpdateAction().execute(new UpdateInput(table(SqlWorkbenchNotebook.TABLE_NAME)).withTransaction(transaction).withRecord(new QRecord()
-         .withValue("id", notebook.getId())
-         .withValue("title", notebook.getTitle())
-         .withValue("description", notebook.getDescription())
-         .withValue("defaultBackendName", notebook.getDefaultBackendName())
-         .withValue("parametersJson", notebook.getParametersJson())
-         .withValue("currentVersion", version)
-         .withValue("modifyDate", now)));
+      DeleteOutput deleted = new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchCell.TABLE_NAME))
+         .withFlag(SqlWorkbenchActionFlag.NOTEBOOK_SAVE)
+         .withQueryFilter(byNotebook(notebook.getId()))
+         .withTransaction(transaction));
+      throwIfErrors(deleted.getRecordsWithErrors());
 
-      new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchCell.TABLE_NAME)).withQueryFilter(byNotebook(notebook.getId())).withTransaction(transaction));
       for(int i = 0; i < cells.size(); i++)
       {
-         cells.get(i).withId(null).withNotebookId(notebook.getId()).withSortOrder(i).withCreateDate(now).withModifyDate(now);
+         cells.get(i).withId(null).withNotebookId(notebook.getId()).withSortOrder(i);
       }
       if(!cells.isEmpty())
       {
-         InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchCell.TABLE_NAME)).withRecordEntities(cells).withTransaction(transaction));
+         InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchCell.TABLE_NAME))
+            .withFlag(SqlWorkbenchActionFlag.NOTEBOOK_SAVE)
+            .withRecordEntities(cells)
+            .withTransaction(transaction));
          for(QRecord record : output.getRecords())
          {
             throwIfErrors(record);
          }
       }
 
-      Map<String, Object> content = new LinkedHashMap<>();
-      content.put("title", notebook.getTitle());
-      content.put("description", notebook.getDescription());
-      content.put("defaultBackendName", notebook.getDefaultBackendName());
-      content.put("parameters", parseParameters(notebook.getParametersJson()));
-      content.put("cells", cells.stream().map(NotebookService::cellView).toList());
-
-      SqlWorkbenchNotebookVersion versionRow = new SqlWorkbenchNotebookVersion()
-         .withNotebookId(notebook.getId())
-         .withVersionNumber(version)
-         .withContentJson(JsonUtils.toJson(content))
-         .withSavedByUserId(caller.userId())
-         .withSavedByName(caller.userName())
-         .withComment(truncate(comment, 255))
-         .withCreateDate(now);
-      InsertOutput output = new InsertAction().execute(new InsertInput(table(SqlWorkbenchNotebookVersion.TABLE_NAME)).withRecordEntity(versionRow).withTransaction(transaction));
-      throwIfErrors(output.getRecords().get(0));
-   }
-
-
-
-   /*******************************************************************************
-    ** Delete versions beyond the retention, oldest first.
-    *******************************************************************************/
-   private void pruneVersions(Integer id) throws QException
-   {
-      SystemUser.run(() ->
-      {
-         QueryInput input = new QueryInput(table(SqlWorkbenchNotebookVersion.TABLE_NAME))
-            .withFilter(byNotebook(id).withOrderBy(new QFilterOrderBy("versionNumber", false)));
-         List<QRecord> records = new QueryAction().execute(input).getRecords();
-         if(records.size() <= config.getNotebookVersionRetention())
-         {
-            return;
-         }
-         List<Serializable> stale = new ArrayList<>();
-         for(QRecord record : records.subList(config.getNotebookVersionRetention(), records.size()))
-         {
-            stale.add(record.getValueInteger("id"));
-         }
-         new DeleteAction().execute(new DeleteInput(table(SqlWorkbenchNotebookVersion.TABLE_NAME)).withPrimaryKeys(stale));
-      });
+      NotebookVersioning.appendVersion(config, runtime.getClock(), notebook.getId(), comment, transaction);
    }
 
 
@@ -655,26 +632,22 @@ public class NotebookService
             throw (new QBadRequestException("Each cell must be an object."));
          }
          Map<String, Object> cell = (Map<String, Object>) map;
-
          String type = cell.get("cellType") == null ? CELL_SQL : cell.get("cellType").toString().toUpperCase();
          if(!CELL_SQL.equals(type) && !CELL_MARKDOWN.equals(type))
          {
             throw (new QBadRequestException("cellType must be SQL or MARKDOWN."));
          }
-
          String content = cell.get("content") == null ? "" : cell.get("content").toString();
          if(content.length() > config.getMaxSqlLength())
          {
             throw (new QBadRequestException("A cell is longer than the limit of " + config.getMaxSqlLength() + " characters."));
          }
-
          String key = cell.get("cellKey") == null ? null : cell.get("cellKey").toString();
          if(!StringUtils.hasContent(key) || key.length() > 64 || !keys.add(key))
          {
             key = UUID.randomUUID().toString();
             keys.add(key);
          }
-
          cells.add(new SqlWorkbenchCell()
             .withCellKey(key)
             .withCellType(type)
@@ -789,13 +762,32 @@ public class NotebookService
 
 
    /*******************************************************************************
-    **
+    ** Throw the first error of a record (a QPermissionDeniedException for
+    ** permission errors, so the notebook UI answers 403).
     *******************************************************************************/
-   private static void throwIfErrors(QRecord record) throws QException
+   static void throwIfErrors(QRecord record) throws QException
    {
-      if(record.getErrors() != null && !record.getErrors().isEmpty())
+      if(record != null && CollectionUtils.nullSafeHasContents(record.getErrors()))
       {
-         throw (new QException("Could not save: " + record.getErrors().get(0).getMessage()));
+         String message = record.getErrors().get(0).getMessage();
+         if(record.getErrors().get(0) instanceof com.kingsrook.qqq.backend.core.model.statusmessages.PermissionDeniedMessage)
+         {
+            throw (new QPermissionDeniedException(message));
+         }
+         throw (new QBadRequestException("Could not save: " + message));
+      }
+   }
+
+
+
+   /*******************************************************************************
+    ** Throw the first error of any record.
+    *******************************************************************************/
+   static void throwIfErrors(List<QRecord> records) throws QException
+   {
+      for(QRecord record : CollectionUtils.nonNullList(records))
+      {
+         throwIfErrors(record);
       }
    }
 
@@ -821,5 +813,4 @@ public class NotebookService
    {
       return (value == null || value.length() <= max ? value : value.substring(0, max - 1) + "…");
    }
-
 }

@@ -251,7 +251,7 @@
    <profiles>
       <!-- Built against qqq 4.1 (QBitMetaDataProducer, runtime services, Javalin 7 -->
       <!-- routes). Until qbit-build-parent 2.1.0 imports the released 4.1 BOM,  -->
-      <!-- this profile is active by default and imports qqq-bom-pom 4.1.0-RC.2  -->
+      <!-- this profile is active by default and imports qqq-bom-pom 4.1.0-RC.3  -->
       <!-- ahead of the parent's 4.0.0 BOM (same as qbit-quick-search, ADR-0007). -->
       <profile>
          <id>qqq-snapshot</id>
@@ -259,7 +259,7 @@
             <activeByDefault>true</activeByDefault>
          </activation>
          <properties>
-            <qqq.snapshot.version>4.1.0-RC.2</qqq.snapshot.version>
+            <qqq.snapshot.version>4.1.0-RC.3</qqq.snapshot.version>
          </properties>
          <dependencyManagement>
             <dependencies>

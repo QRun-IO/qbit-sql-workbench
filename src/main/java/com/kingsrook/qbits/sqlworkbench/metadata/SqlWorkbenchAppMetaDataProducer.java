@@ -27,20 +27,29 @@ import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitComponentMetaData
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitProductionContext;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookVersion;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
 
 
 /*******************************************************************************
  ** The sqlWorkbench app: the workbench widget (rendered by the Next UI as the
- ** notebook UI), plus the notebook and execution-audit tables. Gated by the
- ** access permission, so the app - and so the feature - is only advertised
- ** to users who have it. No processes (they would only add left-nav noise).
+ ** notebook UI), plus every workbench table as a child - notebooks, cells,
+ ** versions, pinned results, shares and the execution audit - so the data
+ ** is administered through the standard QQQ table and record screens. Gated
+ ** by the access permission; each table also needs its own read permission
+ ** to appear. No processes in the nav (record actions live on the tables).
  ** Hosts can re-parent it (e.g. under an Admin app); its name stays the same.
  *******************************************************************************/
 public class SqlWorkbenchAppMetaDataProducer extends QBitComponentMetaDataProducer<QAppMetaData, SqlWorkbenchQBitConfig>
 {
    public static final String APP_NAME = "sqlWorkbench";
+
+   static final List<String> TABLES_IN_NAV = List.of(SqlWorkbenchNotebook.TABLE_NAME, SqlWorkbenchCell.TABLE_NAME, SqlWorkbenchNotebookShare.TABLE_NAME,
+      SqlWorkbenchResultSnapshot.TABLE_NAME, SqlWorkbenchNotebookVersion.TABLE_NAME, SqlWorkbenchExecution.TABLE_NAME);
 
 
 
@@ -62,7 +71,7 @@ public class SqlWorkbenchAppMetaDataProducer extends QBitComponentMetaDataProduc
       MetaDataProducerMultiOutput produced = QBitProductionContext.peekMetaDataProducerMultiOutput();
       if(produced != null)
       {
-         for(String tableName : new String[] { SqlWorkbenchNotebook.TABLE_NAME, SqlWorkbenchExecution.TABLE_NAME })
+         for(String tableName : TABLES_IN_NAV)
          {
             QTableMetaData table = produced.get(QTableMetaData.class, config.applyPrefix(tableName));
             if(table != null)
