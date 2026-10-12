@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog; versions follow semantic versioning.
 
+## [1.0.0-RC.1] - 2026-10-11
+
+First release candidate of 1.0, published to Maven Central from `release/1.0`. It contains every change listed under 1.0.0 below. Requires QQQ 4.1 (built against 4.1.0-RC.2) and a Next UI release that renders the `SQL_WORKBENCH` widget (`v1.0.0-RC.13` or later).
+
 ## [1.0.0] - Unreleased
 
 First release. Requires QQQ 4.1 (built against 4.1.0-RC.2).
