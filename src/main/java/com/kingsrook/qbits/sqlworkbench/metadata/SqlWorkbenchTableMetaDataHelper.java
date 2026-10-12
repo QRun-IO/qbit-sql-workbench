@@ -27,6 +27,7 @@ import com.kingsrook.qbits.sqlworkbench.customizers.CellTableCustomizer;
 import com.kingsrook.qbits.sqlworkbench.customizers.NotebookTableCustomizer;
 import com.kingsrook.qbits.sqlworkbench.customizers.ShareTableCustomizer;
 import com.kingsrook.qbits.sqlworkbench.customizers.SnapshotTableCustomizer;
+import com.kingsrook.qbits.sqlworkbench.model.CellType;
 import com.kingsrook.qbits.sqlworkbench.model.ShareAudienceType;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
@@ -113,11 +114,12 @@ public class SqlWorkbenchTableMetaDataHelper
          .withSection(new QFieldSection("runner", "Runner", new QIcon("play_circle"), Tier.T2, null).withWidgetName(config.applyPrefix(SqlWorkbenchHomeWidgetsMetaDataProducer.NOTEBOOK_RUNNER)))
          .withSection(new QFieldSection("details", new QIcon("description"), Tier.T2, List.of("defaultBackendName", "parametersJson")))
          .withSection(widgetSection(config, JOIN_NOTEBOOK_CELL, "Cells", "notes"))
-         .withSection(widgetSection(config, JOIN_NOTEBOOK_SHARE, "Shared With", "share"))
-         .withSection(widgetSection(config, JOIN_NOTEBOOK_SNAPSHOT, "Pinned Results", "push_pin"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_SHARE, "Shares", "share"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_SNAPSHOT, "Snapshots (pinned results)", "push_pin"))
          .withSection(widgetSection(config, JOIN_NOTEBOOK_VERSION, "Versions", "history"))
          .withSection(widgetSection(config, JOIN_NOTEBOOK_EXECUTION, "Runs", "policy"))
          .withSection(new QFieldSection("system", new QIcon("calendar_month"), Tier.T3, List.of("ownerUserId", "currentVersion", "createDate", "modifyDate")));
+      table.getField("defaultBackendName").setPossibleValueSourceName(config.applyPrefix(WorkbenchBackendPossibleValueProvider.NAME));
       table.getField("visibility").setIsEditable(false);
       table.getField("visibility").setIsRequired(false);
       table.getField("visibility").setDefaultValue("PERSONAL");
@@ -142,9 +144,12 @@ public class SqlWorkbenchTableMetaDataHelper
          .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1, List.of("id", "notebookId", "sortOrder", "cellType", "title")))
          .withSection(new QFieldSection("content", new QIcon("code"), Tier.T2, List.of("content", "backendName")))
          .withSection(new QFieldSection("system", new QIcon("calendar_month"), Tier.T3, List.of("cellKey", "createDate", "modifyDate")));
+      table.getField("backendName").setPossibleValueSourceName(config.applyPrefix(WorkbenchBackendPossibleValueProvider.NAME));
+      table.getField("cellKey").setIsEditable(false);
       table.getField("cellKey").setIsRequired(false);
+      table.getField("cellType").setPossibleValueSourceName(config.applyPrefix(CellType.NAME));
       table.getField("cellType").setIsRequired(false);
-      table.getField("cellType").setDefaultValue("SQL");
+      table.getField("cellType").setDefaultValue(CellType.SQL.getPossibleValueId());
       table.getField("content").withFieldAdornment(new FieldAdornment(AdornmentType.CODE_EDITOR).withValue(AdornmentType.CodeEditorValues.languageMode("sql")));
       return (customize(linkNotebook(config, table), CellTableCustomizer.class));
    }
@@ -233,6 +238,8 @@ public class SqlWorkbenchTableMetaDataHelper
          .withSection(new QFieldSection("system", new QIcon("calendar_month"), Tier.T3, List.of("createDate")));
       table.getField("sqlText").withFieldAdornment(new FieldAdornment(AdornmentType.CODE_EDITOR).withValue(AdornmentType.CodeEditorValues.languageMode("sql")));
       table.getField("notebookId").setPossibleValueSourceName(config.applyPrefix(SqlWorkbenchNotebook.TABLE_NAME));
+      table.getField("parametersJson").withIsEditable(false)
+         .withFieldAdornment(new FieldAdornment(AdornmentType.CODE_EDITOR).withValue(AdornmentType.CodeEditorValues.languageMode("json")));
       appendOnly(table);
       return (table);
    }
@@ -329,11 +336,11 @@ public class SqlWorkbenchTableMetaDataHelper
          .withOnlyIncludeFieldNames(List.of("id", "sortOrder", "cellType", "title", "backendName", "modifyDate"))
          .getWidgetMetaData());
       widgets.add(ChildRecordListRenderer.widgetMetaDataBuilder(joins.get(config.applyPrefix(JOIN_NOTEBOOK_SHARE)))
-         .withLabel("Shared With").withCanAddChildRecord(true)
+         .withLabel("Shares").withCanAddChildRecord(true)
          .withOnlyIncludeFieldNames(List.of("id", "audienceType", "audienceId", "createdByName", "createDate"))
          .getWidgetMetaData());
       widgets.add(ChildRecordListRenderer.widgetMetaDataBuilder(joins.get(config.applyPrefix(JOIN_NOTEBOOK_SNAPSHOT)))
-         .withLabel("Pinned Results")
+         .withLabel("Snapshots (pinned results)")
          .withOnlyIncludeFieldNames(List.of("id", "label", "cellKey", "rowCount", "truncated", "createDate"))
          .getWidgetMetaData());
       widgets.add(ChildRecordListRenderer.widgetMetaDataBuilder(joins.get(config.applyPrefix(JOIN_NOTEBOOK_VERSION)))

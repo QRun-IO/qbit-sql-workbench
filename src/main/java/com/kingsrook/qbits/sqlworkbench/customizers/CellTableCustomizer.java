@@ -202,7 +202,7 @@ public class CellTableCustomizer extends WorkbenchTableCustomizer
    /*******************************************************************************
     ** Type, content and key checks.
     *******************************************************************************/
-   private static void validate(SqlWorkbenchQBitConfig config, QRecord record, boolean inserting)
+   private static void validate(SqlWorkbenchQBitConfig config, QRecord record, boolean inserting) throws QException
    {
       if(inserting || record.getValues().containsKey("cellType"))
       {
@@ -216,6 +216,7 @@ public class CellTableCustomizer extends WorkbenchTableCustomizer
          record.setValue("cellType", type);
       }
 
+      validateBackend(record, "backendName");
       if(inserting && record.getValue("content") == null)
       {
          record.setValue("content", "");

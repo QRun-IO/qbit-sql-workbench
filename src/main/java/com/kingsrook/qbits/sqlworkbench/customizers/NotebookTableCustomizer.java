@@ -262,7 +262,7 @@ public class NotebookTableCustomizer extends WorkbenchTableCustomizer
    /*******************************************************************************
     ** Title (required on insert, never blank) and parameters (a JSON list).
     *******************************************************************************/
-   private static void validateContent(QRecord record, boolean inserting)
+   private static void validateContent(QRecord record, boolean inserting) throws QException
    {
       if(inserting || record.getValues().containsKey("title"))
       {
@@ -277,6 +277,7 @@ public class NotebookTableCustomizer extends WorkbenchTableCustomizer
          }
       }
 
+      validateBackend(record, "defaultBackendName");
       String parameters = record.getValueString("parametersJson");
       if(StringUtils.hasContent(parameters))
       {
