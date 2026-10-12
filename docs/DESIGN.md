@@ -40,7 +40,7 @@ SQL Workbench is a super-user SQL notebook for any QQQ application. Users write 
  ┌──────────────────────────────────┐                 ┌────────────────────────────────────────────┐
  │ /app/sqlWorkbench  (AppHome)     │  GET metaData   │ QQQ middleware (Javalin 7)                 │
  │  └ WidgetRenderer                │◄───────────────►│  /qqq/v1/metaData  (app + widget, filtered │
- │     case 'SQL_WORKBENCH'         │                 │                    by sqlWorkbench.hasAccess)│
+ │     case 'SQL_WORKBENCH'         │                 │                    by sql_workbench.hasAccess)│
  │      └ SqlWorkbenchWidget (lazy) │                 │                                            │
  │         ├ NotebookList           │  /qqq/v1/       │ SqlWorkbenchRouteProvider                  │
  │         ├ NotebookEditor         │  sql-workbench/*│  └ SqlWorkbenchApi (session, perms, JSON)  │
@@ -64,7 +64,8 @@ SQL Workbench is a super-user SQL notebook for any QQQ application. Users write 
 |---|---|
 | `SqlWorkbenchQBitConfig` | Host-facing config (§7). Implements `QBitConfig` with list-based, null-safe `validate`, `getDefaultBackendNameForTables`, and `getTableMetaDataCustomizer`. |
 | `SqlWorkbenchQBitProducer` | `QBitMetaDataProducer<SqlWorkbenchQBitConfig>`, the same pattern as Quick Search. The default `produce()` registers `QBitMetaData`, runs the component producers in `metadata/`, and stamps `sourceQBitName`. `postProduceActions` builds the `SqlWorkbenchRuntime` and registers the Javalin route provider (when Javalin is on the classpath). `produce(QInstance)` adds everything to the instance (Quick Search compat style). |
-| `metadata/*` | The 5 tables, the `sqlWorkbenchWidget` widget (type `SQL_WORKBENCH`), and the `sqlWorkbench` app (widget plus notebook and audit tables). No processes (owner rule). |
+| `metadata/*` | The 6 tables with their record locks, joins and child-list widgets, the two security key types, the record actions (Share Notebook, Duplicate Notebook, Restore Version: processes on tables, never in the nav), the `sqlWorkbenchWidget` widget (type `SQL_WORKBENCH`), and the `sqlWorkbench` app (widget plus all six tables). |
+| `customizers/*` | Table customizers that keep the notebook invariants for every entry point (notebook UI, table UI, `/qqq/v1` API): ownership, cell order and limits, versions, share keys, library visibility, append-only versions and audit, cascades. |
 | `SqlWorkbenchRuntime` | Instance-scoped live state, held transient on the config: result cache, running-statement registry, write-preview tokens, schema cache. |
 | `sql/*` | `SqlScanner` (dialect-aware lexer), `SqlClassifier` (split plus classify), `NamedParameterSql`. Pure Java, with no JDBC dependency. |
 | `engine/*` | `WorkbenchBackends` (target resolution and connection sourcing), `SqlExecutionEngine` (read-only, preview, commit), `SessionGuard` (per-vendor read-only, timeouts, cleanup), `ResultCollector` (typing and limits), `ResultCache`, `WritePreviewTokens`, `ExecutionAuditor`. |
@@ -77,7 +78,7 @@ SQL Workbench is a super-user SQL notebook for any QQQ application. Users write 
 
 ### 2.2 Frontend (Next UI)
 
-The feature is advertised through **app presence**, the same as ESB. `/qqq/v1/metaData` publishes only an allow-list of supplemental metadata, so a flag would not reach the UI. The qbit's app `sqlWorkbench` carries one widget of type `SQL_WORKBENCH`. Both are gated by `sqlWorkbench.hasAccess`, so users without access never see either one. The generic `/app/[slug]` route renders `AppHome`, then `ConnectedWidget`, then `WidgetRenderer`, which gains:
+The feature is advertised through **app presence**, the same as ESB. `/qqq/v1/metaData` publishes only an allow-list of supplemental metadata, so a flag would not reach the UI. The qbit's app `sqlWorkbench` carries one widget of type `SQL_WORKBENCH`. Both are gated by `sql_workbench.hasAccess`, so users without access never see either one. The generic `/app/[slug]` route renders `AppHome`, then `ConnectedWidget`, then `WidgetRenderer`, which gains:
 
 ```tsx
 case 'SQL_WORKBENCH': return <SqlWorkbenchWidget widgetMetaData={widgetMetaData} />   // React.lazy
@@ -104,9 +105,20 @@ Components (`src/components/sql-workbench/`):
 
 ## 3. Data model
 
-Five tables on the host-chosen backend (`config.backendName`). Names can be prefixed (`tableNamePrefix`) or customized (`tableMetaDataCustomizer`, for example snake_case backend names). The Postgres DDL is in [`docs/ddl/postgres.sql`](ddl/postgres.sql). Liquibase users can drop it into a formatted-SQL changeset.
+Six tables on the host-chosen backend (`config.backendName`). They are standard QQQ tables in the `sqlWorkbench` app, with the usual query, record, edit, export, audit, and developer-mode screens, and record security locks decide who sees which rows (section 6).
 
-### `sqlWorkbenchNotebook`
+```mermaid
+erDiagram
+   sql_workbench_notebook ||--o{ sql_workbench_cell : "cells (ordered)"
+   sql_workbench_notebook ||--o{ sql_workbench_notebook_version : "versions (append-only)"
+   sql_workbench_notebook ||--o{ sql_workbench_result_snapshot : "pinned results"
+   sql_workbench_notebook ||--o{ sql_workbench_notebook_share : "shared with (read)"
+   sql_workbench_execution }o..o| sql_workbench_notebook : "ran from (no FK)"
+```
+
+ Names can be prefixed (`tableNamePrefix`) or customized (`tableMetaDataCustomizer`, for example snake_case backend names). The Postgres DDL is in [`docs/ddl/postgres.sql`](ddl/postgres.sql). Liquibase users can drop it into a formatted-SQL changeset.
+
+### `sql_workbench_notebook`
 | field | type | notes |
 |---|---|---|
 | id | INTEGER PK | |
@@ -114,34 +126,48 @@ Five tables on the host-chosen backend (`config.backendName`). Names can be pref
 | description | TEXT | |
 | ownerUserId | STRING(255) | `QSession.user.idReference`, required |
 | ownerName | STRING(255) | display only |
-| visibility | STRING(16) | `PERSONAL` (default) or `SHARED` |
+| visibility | STRING(16) | `PERSONAL` or `SHARED`; derived from the shares (`SHARED` while an `ALL` share exists), not editable |
 | defaultBackendName | STRING(100) | |
 | parametersJson | TEXT | `[{"name","type","defaultValue","label"}]` |
-| currentVersion | INTEGER | incremented on every save |
+| currentVersion | INTEGER | incremented on every content change, from the notebook UI or the tables |
 | createDate, modifyDate | DATE_TIME | |
 
-### `sqlWorkbenchCell`
+### `sql_workbench_cell`
 | field | type | notes |
 |---|---|---|
 | id | INTEGER PK | |
 | notebookId | INTEGER | FK, PVS to notebook |
 | cellKey | STRING(64) | client-stable UUID; snapshots and audit refer to it |
-| sortOrder | INTEGER | |
+| sortOrder | INTEGER | cells added through the table go last |
 | cellType | STRING(16) | `SQL` or `MARKDOWN` |
 | title | STRING(255) | |
 | content | TEXT | SQL or markdown |
 | backendName | STRING(100) | null means the notebook default |
 | createDate, modifyDate | DATE_TIME | |
 
-### `sqlWorkbenchNotebookVersion`
-Append-only history. Each save writes the full notebook plus cells as JSON.
+### `sql_workbench_notebook_version`
+Append-only history. Each save writes the full notebook plus cells as JSON: a notebook-UI save writes one version; a table edit of the notebook or one of its cells writes one version per change (`NotebookVersioning`, as the system user, after QQQ has authorized the change).
 `id, notebookId, versionNumber, contentJson (TEXT), savedByUserId, savedByName, comment, createDate`. Unique key: `(notebookId, versionNumber)`. Retention: `notebookVersionRetention` (default 100 per notebook, oldest pruned on save).
 
-### `sqlWorkbenchResultSnapshot`
-Pinned results.
+### `sql_workbench_result_snapshot`
+Pinned results. Created only by pinning a cached result in the notebook UI (so the data comes from a real run); through the table only `label` can change, and the owner can delete them.
 `id, notebookId, cellKey, executionUuid, label, backendName, sqlText (TEXT), resultJson (TEXT: columns plus up to snapshotMaxRows rows), rowCount, truncated, createdByUserId, createDate`.
 
-### `sqlWorkbenchExecution` (audit, append-only)
+### `sql_workbench_notebook_share`
+Who, besides the owner, may read a notebook (read only; no shared editing).
+| field | type | notes |
+|---|---|---|
+| id | INTEGER PK | |
+| notebookId | INTEGER | FK, PVS to notebook; cannot change |
+| audienceType | STRING(16) | `USER`, `GROUP`, or `ALL` (the shared library) |
+| audienceId | STRING(255) | the user id or group name; null for `ALL` |
+| audienceKey | STRING(300) | computed: `user:<id>`, `group:<name>` (lower-cased), or `all`; unique per notebook; what the share locks match |
+| createdByUserId, createdByName | STRING(255) | |
+| createDate, modifyDate | DATE_TIME | |
+
+Publishing in the notebook UI inserts (or deletes) the `ALL` share; the share customizer keeps the notebook's `visibility` in step.
+
+### `sql_workbench_execution` (audit, append-only)
 | field | type | notes |
 |---|---|---|
 | id | INTEGER PK | |
@@ -164,14 +190,14 @@ Pinned results.
 | clientIp | STRING(64) | from the request, when available |
 | createDate | DATE_TIME | |
 
-The audit table has its insert, edit, and delete capabilities disabled in the QQQ metadata, so the UI and generic API cannot change it. The engine writes it through QQQ actions with a system session context. The row is inserted **before** execution (`RUNNING`). If that insert fails, the SQL **does not run** (fail closed). The row is updated at the end. Retention: `auditRetentionDays` (default unlimited; the host prunes).
+The audit table has its insert, edit, and delete capabilities disabled in the QQQ metadata, so the UI and generic API do not offer those operations, and its customizer rejects them in the core actions for every session but the system user (admins included). Its record lock shows each user their own rows (admins all). The engine writes it through QQQ actions with a system session context. The row is inserted **before** execution (`RUNNING`). If that insert fails, the SQL **does not run** (fail closed). The row is updated at the end. Retention: `auditRetentionDays` (default unlimited; the host prunes).
 
 ---
 
 ## 4. Execution engine
 
 ### 4.1 Pipeline (every run)
-1. **Authorize.** The session must have `sqlWorkbench.hasAccess` (403 otherwise). Write and EXPLAIN ANALYZE also need `sqlWorkbench.write` and `config.writeModeEnabled`.
+1. **Authorize.** The session must have `sql_workbench.hasAccess` (403 otherwise). Write and EXPLAIN ANALYZE also need `sql_workbench.write` and `config.writeModeEnabled`.
 2. **Resolve the target.** The backend must be an `RDBMSBackendMetaData` in the instance and allowed by `allowedBackendNames` / `excludedBackendNames` (404 otherwise). The dialect comes from the vendor.
 3. **Validate.** Check the SQL length (`maxSqlLength`, default 100 KB), then split and classify with `SqlClassifier`. Rules:
    - `FORBIDDEN` statements are rejected in every mode. On MySQL this includes any statement with an executable comment (`/*! ... */`, `/*M! ... */`) or optimizer hint (`/*+ ... */`): MySQL runs their contents, so the scanner keeps them as tokens instead of skipping them, and fails closed. MySQL `--` comments need trailing whitespace (`1--1` is arithmetic).
@@ -207,7 +233,7 @@ There is no session-level `SET` leakage: user SQL can never run `SET` / `RESET` 
 > **Defense in depth.** The READ ONLY transaction is the primary control on Postgres, MySQL, and SQLite. On H2 the classifier is the only control, so production should use Postgres or MySQL with `readOnlyCredentials` (a role with `SELECT` grants only). A READ ONLY transaction does not stop side-effecting *functions* that are not writes, such as `pg_terminate_backend()` or `pg_sleep()`. Only a least-privilege role does. That is why `readOnlyCredentials` is recommended for production.
 
 ### 4.3 Write mode
-Write mode needs `sqlWorkbench.write`. It is a two-step protocol:
+Write mode needs `sql_workbench.write`. It is a two-step protocol:
 
 1. **Preview**: `POST /execute {mode: "WRITE"}` with no `confirmToken`.
    - Classify the statements and reject `FORBIDDEN` ones.
@@ -276,7 +302,7 @@ The response is `{executionUuid, dialect, analyze, plan: PlanNode, raw: string}`
 
 SQL errors are results, not HTTP errors: `/execute` and `/explain` return 200 with `status` FAILED, TIMED_OUT, or CANCELLED plus `error` and `sqlState`.
 
-All endpoints need an authenticated QQQ session (cookie or Authorization header, via `ExecutorSessionUtils.setupSession`) and `sqlWorkbench.hasAccess`. Errors are `{"error": "..."}` with 400, 401, 403, 404, 409 (a re-used `executionUuid`), or 500, through `QJavalinUtils.handleException`. Execution UUIDs are case-insensitive on every path (`/execute`, `/executions/{uuid}/rows`, `/export`, `/cancel`, snapshots); the server stores and returns them lower-case. Bodies are JSON. Request and response bodies are never logged.
+All endpoints need an authenticated QQQ session (cookie or Authorization header, via `ExecutorSessionUtils.setupSession`) and `sql_workbench.hasAccess`. Errors are `{"error": "..."}` with 400, 401, 403, 404, 409 (a re-used `executionUuid`), or 500, through `QJavalinUtils.handleException`. Execution UUIDs are case-insensitive on every path (`/execute`, `/executions/{uuid}/rows`, `/export`, `/cancel`, snapshots); the server stores and returns them lower-case. Bodies are JSON. Request and response bodies are never logged.
 
 ```yaml
 GET  /capabilities
@@ -308,7 +334,7 @@ POST   /notebooks        body: Notebook    -> Notebook (version 1)
 GET    /notebooks/{id}                     -> Notebook (with cells, canEdit)
 PUT    /notebooks/{id}   body: Notebook    -> Notebook (cells replaced, new version)
 DELETE /notebooks/{id}                     -> { deleted: true }
-POST   /notebooks/{id}/publish  body: { shared: bool }    (needs sqlWorkbench.share)
+POST   /notebooks/{id}/publish  body: { shared: bool }    (needs sql_workbench.share)
 POST   /notebooks/{id}/duplicate          -> Notebook (personal copy)
 GET    /notebooks/{id}/versions           -> { versions: [{versionNumber, savedByName, comment, createDate}] }
 GET    /notebooks/{id}/versions/{n}       -> { versionNumber, notebook: Notebook }
@@ -323,7 +349,7 @@ DELETE /notebooks/{id}/snapshots/{snapshotId}
 Visibility rules:
 - A user can read their own notebooks and all `SHARED` ones.
 - Only the owner can edit, delete, snapshot, or restore.
-- Publishing or unpublishing needs `sqlWorkbench.share` **and** ownership.
+- Publishing or unpublishing needs `sql_workbench.share` **and** ownership.
 - Anyone with access can duplicate a readable notebook.
 
 ---
@@ -332,7 +358,7 @@ Visibility rules:
 
 | Concern | Control |
 |---|---|
-| Who | Deny by default. Every endpoint needs `sqlWorkbench.hasAccess` (the app and widget permission base name `sqlWorkbench`, at `HAS_ACCESS_PERMISSION`). Write mode and EXPLAIN ANALYZE need `sqlWorkbench.write`. Publishing to the library needs `sqlWorkbench.share`. The qbit's tables use a separate base name, `sqlWorkbenchAdmin` (`sqlWorkbenchAdmin.hasAccess`), so only administrators reach them through the generic QQQ table UI / API. The names are configurable. |
+| Who | Deny by default. Every endpoint needs `sql_workbench.hasAccess` (the app and widget permission base name `sqlWorkbench`, at `HAS_ACCESS_PERMISSION`). Write mode and EXPLAIN ANALYZE need `sql_workbench.write`. Sharing (including publishing to the library) needs `sql_workbench.share` plus insert/edit/delete on the share table. The tables use QQQ's per-table `READ_INSERT_EDIT_DELETE_PERMISSIONS`; `SqlWorkbenchQBitConfig.getUserPermissionNames / getSharePermissionNames / getAdminPermissionNames` list what to grant per role. `sql_workbench_admin.hasAccess` grants the all-access key. The names are configurable. |
 | What can run | Read-only transactions by default (§4.2); classifier as defense in depth; `FORBIDDEN` statements in every mode; one statement per read-only run. |
 | Writes | Separate permission, two-step preview then commit with a server-side single-use token bound to the user, SQL, and backend, a dry run with rollback, a row guard with acknowledgement, a hard cap, a drift check, and a statement timeout. |
 | Credentials | Never returned or logged. Backend metadata goes out only as `{name, label, vendor, dialect}`. `readOnlyCredentials` support `${env.X}` / `${prop.X}` interpolation (`QMetaDataVariableInterpreter`), and the config's `toString` redacts them. |
@@ -340,7 +366,9 @@ Visibility rules:
 | Session and CSRF | QQQ middleware session handling. The cookie session is `HttpOnly`; there is no extra CSRF token, matching the rest of `/qqq/v1` (the JSON-only POSTs need `Content-Type: application/json`, which a cross-site form cannot send without a CORS preflight). The route provider rejects non-JSON POST bodies. |
 | Isolation between users | Result cache, cancellation, history, and write tokens are keyed by the user's `idReference`. Another user's execution UUID returns 404. |
 | QQQ semantics | **Raw SQL bypasses QQQ**: no record security locks, table/field permissions, hidden fields, audit of record changes, or customizers/automations. Rows changed in write mode do **not** trigger QQQ audits, record-change listeners, ESB events, or Quick Search indexing. This is documented in the UI (a banner in write mode) and in the README. Use QQQ processes for business changes. |
-| Personal vs shared | A personal notebook is visible only to its owner. The five tables need `sqlWorkbenchAdmin.hasAccess`, which ordinary workbench users do not hold, so `/qqq/v1/table/...` cannot read or write other users' notebooks, cells, versions, pinned snapshots, or audit rows. `NotebookService` and the history endpoint check owner / visibility / share permission in code, then read and write as the system user (`SystemUser`), as `ExecutionAuditor` does for the audit. Cells, versions, snapshots, and the audit have insert / edit / delete disabled; only the qbit writes them. Holders of the admin permission see every user's notebooks and the full audit. |
+| Which rows | Record security locks, enforced by QQQ's core actions and therefore for every entry point (table UI, `/qqq/v1` table API, exports, PVS lookups, processes, the workbench endpoints). Two key types: `sql_workbench_user` (the session's user id; all-access key `sql_workbench_all_access` for admins) and `sql_workbench_audience` (`user:<id>`, `group:<name>` per group, `all`). A notebook's lock is OR(owner lock on `ownerUserId`, read-scoped share lock on `sql_workbench_notebook_share.audienceKey` through the share-to-notebook join); its cells, versions and pinned results lock through their notebook (one and two joins); a share row is readable by the notebook's owner or the audience it names; an execution by its `userId`. Writes evaluate only the write-scoped locks, so being shared with is read-only. The RDBMS module de-duplicates rows that match through several shares (`SELECT DISTINCT`, `COUNT(DISTINCT)`). Hosts call `SqlWorkbenchSecurity.applyToSession` from their authentication customizer; sessions without the access permission get no keys and see no rows. |
+| Invariants | Table customizers, shared by the notebook UI and the tables: the owner is the inserting session (only the system user may insert for someone else); `visibility`, `currentVersion` and dates are system-managed; cells are validated (type, length, key) and appended in order, never move notebooks, and every change writes a version; shares compute `audienceKey`, need the share permission, and keep `visibility` in step; pinned results are only created by pinning and only relabeled; versions and the audit are append-only for everyone but the system user. `NotebookService` runs as the caller through the same actions (flagging a whole-notebook save so it is versioned once) and keeps its explicit owner / share checks as defense in depth; only version bookkeeping and cascades run as the system user, after QQQ authorized the change. |
+| QQQ dependency | Partial updates of child rows (a cell's content, a pinned result's label) pass the joined write locks only with QQQ `4.1.0-RC.4`+ (qqq#1073: locks are validated against the stored row overlaid with the written values). |
 
 ---
 
@@ -358,9 +386,9 @@ Visibility rules:
 | `useBackendReadOnlyReplica` | true | use the backend's `readOnlyBackendMetaData` for read-only sessions |
 | `writeModeEnabled` | true | a global kill switch for write mode |
 | `accessPermissionBaseName` | `sqlWorkbench` | `<base>.hasAccess` |
-| `writePermissionName` | `sqlWorkbench.write` | |
-| `sharePermissionName` | `sqlWorkbench.share` | |
-| `adminPermissionBaseName` | `sqlWorkbenchAdmin` | `<base>.hasAccess` guards the qbit's tables in the generic table UI / API; must differ from `accessPermissionBaseName` |
+| `writePermissionName` | `sql_workbench.write` | |
+| `sharePermissionName` | `sql_workbench.share` | |
+| `adminPermissionBaseName` | `sql_workbench_admin` | `<base>.hasAccess` grants the all-access security key (every user's rows); must differ from `accessPermissionBaseName` |
 | `statementTimeoutSeconds` | 30 | read-only and EXPLAIN |
 | `writeStatementTimeoutSeconds` | 60 | preview and commit |
 | `maxRows` | 10000 | rows kept per result |
@@ -404,7 +432,7 @@ Visibility rules:
 │                        │ + SQL cell   + Markdown cell                                      │
 └────────────────────────┴───────────────────────────────────────────────────────────────────┘
 
-Write mode (user has sqlWorkbench.write; toggled per cell):
+Write mode (user has sql_workbench.write; toggled per cell):
 ┌ Confirm write on "postgres" ───────────────────────────────────────────┐
 │ ⚠ Raw SQL bypasses QQQ security, audits, automations and indexing.     │
 │ 1. UPDATE  UPDATE web_user SET active = false WHERE …     1,204 rows   │
@@ -472,7 +500,7 @@ Plan tab:
 | 5 (later) | Saved-query sharing beyond the library, scheduled notebooks, per-backend permissions (`sqlWorkbench.backend.<name>`), result diffing, a core QQQ `availablePermissions` hook for `write` / `share` | backlog |
 
 ## 11. Open questions
-1. **Permission discovery.** `sqlWorkbench.write` and `sqlWorkbench.share` are plain session permissions. QQQ 4.1 lists available permissions only from tables, processes, apps, reports, and widgets, so these two do not appear in role-management UIs (for example qbit-user-role-permissions). Options: a core hook for custom permissions, or hidden marker widgets. Deferred.
-2. **Per-backend authorization.** Should write access be limited per backend (for example `sqlWorkbench.write.<backend>`)? 1.0 uses one global write permission (the owner will refine later).
+1. **Permission discovery.** `sql_workbench.write` and `sql_workbench.share` are plain session permissions. QQQ 4.1 lists available permissions only from tables, processes, apps, reports, and widgets, so these two do not appear in role-management UIs (for example qbit-user-role-permissions). Options: a core hook for custom permissions, or hidden marker widgets. Deferred.
+2. **Per-backend authorization.** Should write access be limited per backend (for example `sql_workbench.write.<backend>`)? 1.0 uses one global write permission (the owner will refine later).
 3. **Audit retention and redaction.** The audit stores parameter values verbatim. Should hosts be able to redact, for example, `password`-like parameter names? 1.0 stores them as is.
 4. **H2 in production.** H2 has no enforced read-only transaction. Should the workbench refuse H2 targets in production unless read-only credentials are configured? 1.0 allows it, with a warning in capabilities (`readOnlyEnforced: false`).

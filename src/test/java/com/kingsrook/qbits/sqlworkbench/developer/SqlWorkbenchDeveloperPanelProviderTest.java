@@ -172,8 +172,8 @@ class SqlWorkbenchDeveloperPanelProviderTest extends BaseSqlWorkbenchTest
       DeveloperPanelBlock links = panel.getBlocks().stream().filter(b -> b.getType() == DeveloperPanelBlockType.LINKS).findFirst().orElseThrow();
       assertEquals(2, links.getLinks().size());
       DeveloperPanelLink recordLink = links.getLinks().get(0);
-      assertThat(recordLink.getHref()).startsWith("/app/sqlWorkbench?sql=").endsWith("&backend=h2").doesNotContain(" ", "+", "'", "\n");
-      String sqlParam = recordLink.getHref().substring("/app/sqlWorkbench?sql=".length(), recordLink.getHref().indexOf("&backend="));
+      assertThat(recordLink.getHref()).startsWith("/app/sqlWorkbenchRunner?sql=").endsWith("&backend=h2").doesNotContain(" ", "+", "'", "\n");
+      String sqlParam = recordLink.getHref().substring("/app/sqlWorkbenchRunner?sql=".length(), recordLink.getHref().indexOf("&backend="));
       assertEquals(code.get(0).getCode(), URLDecoder.decode(sqlParam, StandardCharsets.UTF_8));
       assertThat(links.getLinks().get(1).getHref()).contains("LIMIT%20100");
 
@@ -183,7 +183,7 @@ class SqlWorkbenchDeveloperPanelProviderTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
-    ** A prefixed workbench links to its prefixed app; the replica is reported.
+    ** A prefixed workbench links to its prefixed Runner; the replica is reported.
     *******************************************************************************/
    @Test
    void testPrefixAndReplica() throws Exception
@@ -196,7 +196,7 @@ class SqlWorkbenchDeveloperPanelProviderTest extends BaseSqlWorkbenchTest
 
       DeveloperPanel panel = new SqlWorkbenchDeveloperPanelProvider().build(context("person", 7));
       String href = panel.getBlocks().stream().filter(b -> b.getType() == DeveloperPanelBlockType.LINKS).findFirst().orElseThrow().getLinks().get(0).getHref();
-      assertThat(href).startsWith("/app/ops_sqlWorkbench?sql=");
+      assertThat(href).startsWith("/app/ops_sqlWorkbenchRunner?sql=");
       assertThat(panel.getBlocks().get(0).getCode()).endsWith("WHERE \"id\" = 7");
       DeveloperPanelBlock keyValues = panel.getBlocks().stream().filter(b -> b.getType() == DeveloperPanelBlockType.KEY_VALUES).findFirst().orElseThrow();
       assertEquals("Yes (h2Replica)", keyValues.getItems().get(3).getValue());

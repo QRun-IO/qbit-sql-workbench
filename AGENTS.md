@@ -4,7 +4,7 @@ This file provides guidance to Codex when working with code in this repository.
 
 ## Project Overview
 
-**QBit SQL Workbench**: a QQQ QBit that provides a super-user SQL notebook. Sessions are read-only by default, write mode is gated, and everything is audited. It works over any RDBMS backend of the instance. The UI is the Next UI `SQL_WORKBENCH` widget. Design: `docs/DESIGN.md`.
+**QBit SQL Workbench**: a QQQ QBit that provides a super-user SQL notebook. Sessions are read-only by default, write mode is gated, and everything is audited. It works over any RDBMS backend of the instance. The UI is the Next UI `SQL_WORKBENCH` widget on the Runner page; the app's home is a dashboard (`home/`). Design: `docs/DESIGN.md`.
 
 ## Build Commands
 
@@ -18,7 +18,7 @@ CI=true ./mvnw verify   # Unit + Postgres integration tests (Docker) + JaCoCo ga
 
 How tests are split:
 - **Integration tests** (`*IntegrationTest`) run under failsafe and use `@ExtendWith(RequiresDockerCondition.class)`. Without Docker they are skipped locally; with `CI=true` the build fails instead.
-- **Unit tests** extend `BaseSqlWorkbenchTest`. It sets up an H2 backend `h2` with the snake_case DDL from `src/test/resources/sql-workbench-h2.sql`, MOCK auth, and a session customizer. The session id prefix picks the permissions: `reader-*` gets access, `writer-*` gets access plus write plus share, anything else gets nothing.
+- **Unit tests** extend `BaseSqlWorkbenchTest`. It sets up an H2 backend `h2` with the snake_case DDL from `src/test/resources/sql-workbench-h2.sql`, MOCK auth, and a session customizer. The session id prefix picks the permissions: `reader-*` gets the user permission list, `writer-*` adds write and share, `admin-*` gets the admin list, anything else gets nothing. `loginAs(user, groups...)` / `as(user)` also apply the security keys; notebook calls must run with the matching session. `TableSecurityMatrixTest` is the role x table x action matrix.
 
 ## Architecture
 
@@ -37,9 +37,13 @@ How tests are split:
   - `ExecutionAuditor` writes audits through QQQ actions as `QSystemUserSession`.
 - `explain/`: `PlanParser` (Postgres JSON, MySQL JSON/text, SQLite rows, text) and `PlanNode`.
 - `schema/`: `SchemaIntrospector` (JDBC `DatabaseMetaData` plus the QQQ table and field to SQL name mapping), cached in the runtime.
-- `notebook/`: `NotebookService` (CRUD, visibility, versions in one transaction, snapshots).
+- `notebook/`: `NotebookService` (CRUD, sharing, versions in one transaction, snapshots), run as the caller's session through the standard table actions; `NotebookVersioning` (one version per change, as the system user).
 - `api/`: `SqlWorkbenchApi` (transport-agnostic, permission checks), `SqlWorkbenchRouteProvider` (Javalin 7 routes under `/qqq/v1/sql-workbench`), `ResultExporter` (CSV/JSON/XLSX via fastexcel), and `SqlWorkbenchRoutes`.
-- `metadata/`: the 5 tables, the notebook PVS, the `SQL_WORKBENCH` widget and its renderer, and the `sqlWorkbench` app.
+- `metadata/`: the 6 tables (record locks, joins, child-list widgets), the security key types, the PVSs, the record actions, the `SQL_WORKBENCH` widget and its renderer, the home dashboard widgets, the Runner child app, and the `sqlWorkbench` app (nav: Runner, then the main tables only).
+- `home/`: the dashboard data (`SqlWorkbenchHome`, read through core actions in the viewer's session so locks apply), its renderer, and inline-styled HTML helpers.
+- `SqlWorkbenchIntegrations`: opt-in ESB and Quick Search hooks for the main tables.
+- `customizers/`: table customizers holding the notebook invariants for every entry point; `SqlWorkbenchSecurity` puts the lock keys in sessions.
+- `processes/`: the record-action steps (Share, Duplicate, Restore Version).
 - `developer/`: `SqlWorkbenchDeveloperPanelProvider` (the "SQL Workbench" record developer panel, registered by `metadata/SqlWorkbenchDeveloperPanelsMetaDataProducer`) and `RecordSql` (read-only SELECTs in backend names, dialect quoting and literals).
 
 **Invariants (do not break):**
@@ -47,6 +51,8 @@ How tests are split:
 - Audit `start()` runs before any SQL. If it fails, the SQL does not run.
 - Audit updates are deferred until the session's connection is released (`Deferred` in the engine), so the engine never needs two pooled connections at once.
 - Engine-side session settings must be transaction-scoped (`SET LOCAL`) or reverted in `SessionGuard.close`.
+- Workbench rows are read and written as the caller (record locks apply). Only the audit writes, version bookkeeping, cascades and share-visibility sync run as the system user, after QQQ authorized the change. Never re-hide the tables or bypass the locks to fix a permission problem.
+- Table customizers hold the notebook invariants; the notebook UI and the table UI must behave the same.
 - SQL errors are results (`status` FAILED, TIMED_OUT, or CANCELLED). Exceptions are only for 400, 401, 403, and 404.
 
 ## Code Style

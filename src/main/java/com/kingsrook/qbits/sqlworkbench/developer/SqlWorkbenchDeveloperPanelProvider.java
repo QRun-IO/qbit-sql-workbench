@@ -37,6 +37,7 @@ import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
 import com.kingsrook.qbits.sqlworkbench.engine.WorkbenchBackends;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchAppMetaDataProducer;
+import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchRunnerAppMetaDataProducer;
 import com.kingsrook.qqq.backend.module.rdbms.actions.AbstractRDBMSAction;
 
 
@@ -127,7 +128,7 @@ public class SqlWorkbenchDeveloperPanelProvider implements DeveloperPanelProvide
 
       QTableMetaData           table      = context.getTable();
       WorkbenchBackends.Target target     = resolved.target();
-      String                   appName    = resolved.config().applyPrefix(SqlWorkbenchAppMetaDataProducer.APP_NAME);
+      String                   runnerApp  = resolved.config().applyPrefix(SqlWorkbenchRunnerAppMetaDataProducer.APP_NAME);
       Serializable             primaryKey = context.getPrimaryKey();
 
       DeveloperPanel panel = new DeveloperPanel()
@@ -143,7 +144,7 @@ public class SqlWorkbenchDeveloperPanelProvider implements DeveloperPanelProvide
          panel.withBlock(DeveloperPanelBlock.code("Read-only query for this record", "sql", recordSql));
          links.withLink(new DeveloperPanelLink()
             .withLabel("Open in SQL Workbench")
-            .withHref(workbenchHref(appName, recordSql, target.name()))
+            .withHref(workbenchHref(runnerApp, recordSql, target.name()))
             .withDescription("This record's query, as a new cell (not run)"));
       }
 
@@ -151,7 +152,7 @@ public class SqlWorkbenchDeveloperPanelProvider implements DeveloperPanelProvide
       panel.withBlock(DeveloperPanelBlock.code("Read-only query for this table (first " + RecordSql.TABLE_ROW_LIMIT + " rows)", "sql", tableSql));
       links.withLink(new DeveloperPanelLink()
          .withLabel(primaryKey == null ? "Open in SQL Workbench" : "Open table query in SQL Workbench")
-         .withHref(workbenchHref(appName, tableSql, target.name()))
+         .withHref(workbenchHref(runnerApp, tableSql, target.name()))
          .withDescription("The table's query, as a new cell (not run)"));
 
       panel.withBlock(DeveloperPanelBlock.keyValues("Backend")
@@ -171,7 +172,8 @@ public class SqlWorkbenchDeveloperPanelProvider implements DeveloperPanelProvide
 
 
    /*******************************************************************************
-    ** The workbench page with the SQL to open (as a new cell) and its backend.
+    ** The Runner page with the SQL to open (as a new cell, never run) and its
+    ** backend.
     *******************************************************************************/
    static String workbenchHref(String appName, String sql, String backendName)
    {

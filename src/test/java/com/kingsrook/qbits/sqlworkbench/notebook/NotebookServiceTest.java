@@ -107,7 +107,7 @@ class NotebookServiceTest extends BaseSqlWorkbenchTest
    @SuppressWarnings("unchecked")
    void testCreateGetUpdateVersions() throws Exception
    {
-      Map<String, Object> created = service.create(body("People", List.of(cell("a", "MARKDOWN", "# Hi"), cell("b", "sql", "SELECT 1"))), caller(READER));
+      Map<String, Object> created = service.create(body("People", List.of(cell("a", "MARKDOWN", "# Hi"), cell("b", "sql", "SELECT 1"))), as(READER));
       Integer id = (Integer) created.get("id");
       assertThat(created.get("visibility")).isEqualTo("PERSONAL");
       assertThat(created.get("currentVersion")).isEqualTo(1);
@@ -117,20 +117,20 @@ class NotebookServiceTest extends BaseSqlWorkbenchTest
 
       Map<String, Object> update = body("People v2", List.of(cell("b", "SQL", "SELECT 2")));
       update.put("comment", "trim");
-      Map<String, Object> updated = service.update(id, update, caller(READER));
+      Map<String, Object> updated = service.update(id, update, as(READER));
       assertThat(updated.get("title")).isEqualTo("People v2");
       assertThat(updated.get("currentVersion")).isEqualTo(2);
       assertThat((List<?>) updated.get("cells")).hasSize(1);
       assertThat(QueryAction.execute(SqlWorkbenchCell.TABLE_NAME, new QQueryFilter())).hasSize(1);
 
-      List<Map<String, Object>> versions = service.versions(id, caller(READER));
+      List<Map<String, Object>> versions = service.versions(id, as(READER));
       assertThat(versions).extracting(v -> v.get("versionNumber")).containsExactly(2, 1);
       assertThat(versions.get(0).get("comment")).isEqualTo("trim");
 
-      Map<String, Object> v1 = service.version(id, 1, caller(READER));
+      Map<String, Object> v1 = service.version(id, 1, as(READER));
       assertThat(((Map<String, Object>) v1.get("notebook")).get("title")).isEqualTo("People");
 
-      Map<String, Object> restored = service.restore(id, 1, caller(READER));
+      Map<String, Object> restored = service.restore(id, 1, as(READER));
       assertThat(restored.get("title")).isEqualTo("People");
       assertThat(restored.get("currentVersion")).isEqualTo(3);
       assertThat((List<?>) restored.get("cells")).hasSize(2);
@@ -138,11 +138,11 @@ class NotebookServiceTest extends BaseSqlWorkbenchTest
       ////////////////////////////////////
       // retention keeps the newest 3   //
       ////////////////////////////////////
-      service.update(id, Map.of("title", "People v4"), caller(READER));
+      service.update(id, Map.of("title", "People v4"), as(READER));
       assertThat(QueryAction.execute(SqlWorkbenchNotebookVersion.TABLE_NAME, new QQueryFilter())).hasSize(3);
-      assertThat(service.get(id, caller(READER)).get("cells")).asList().hasSize(2);
+      assertThat(service.get(id, as(READER)).get("cells")).asList().hasSize(2);
 
-      assertThatThrownBy(() -> service.version(id, 1, caller(READER))).isInstanceOf(QNotFoundException.class);
+      assertThatThrownBy(() -> service.version(id, 1, as(READER))).isInstanceOf(QNotFoundException.class);
    }
 
 
@@ -153,31 +153,31 @@ class NotebookServiceTest extends BaseSqlWorkbenchTest
    @Test
    void testVisibilityAndSharing() throws Exception
    {
-      Integer mine = (Integer) service.create(body("Mine", List.of()), caller(WRITER)).get("id");
+      Integer mine = (Integer) service.create(body("Mine", List.of()), as(WRITER)).get("id");
 
-      assertThat(service.list("mine", caller(WRITER))).hasSize(1);
-      assertThat(service.list("mine", caller(READER))).isEmpty();
-      assertThat(service.list("shared", caller(READER))).isEmpty();
-      assertThatThrownBy(() -> service.get(mine, caller(READER))).isInstanceOf(QNotFoundException.class);
+      assertThat(service.list("mine", as(WRITER))).hasSize(1);
+      assertThat(service.list("mine", as(READER))).isEmpty();
+      assertThat(service.list("shared", as(READER))).isEmpty();
+      assertThatThrownBy(() -> service.get(mine, as(READER))).isInstanceOf(QNotFoundException.class);
 
-      assertThatThrownBy(() -> service.publish(mine, true, caller(READER))).isInstanceOf(QPermissionDeniedException.class);
-      assertThat(service.publish(mine, true, caller(WRITER)).get("visibility")).isEqualTo("SHARED");
+      assertThatThrownBy(() -> service.publish(mine, true, as(READER))).isInstanceOf(QPermissionDeniedException.class);
+      assertThat(service.publish(mine, true, as(WRITER)).get("visibility")).isEqualTo("SHARED");
 
-      assertThat(service.list("shared", caller(READER))).hasSize(1);
-      assertThat(service.get(mine, caller(READER)).get("canEdit")).isEqualTo(false);
-      assertThatThrownBy(() -> service.update(mine, Map.of("title", "x"), caller(READER))).isInstanceOf(QPermissionDeniedException.class);
-      assertThatThrownBy(() -> service.delete(mine, caller(READER))).isInstanceOf(QPermissionDeniedException.class);
+      assertThat(service.list("shared", as(READER))).hasSize(1);
+      assertThat(service.get(mine, as(READER)).get("canEdit")).isEqualTo(false);
+      assertThatThrownBy(() -> service.update(mine, Map.of("title", "x"), as(READER))).isInstanceOf(QPermissionDeniedException.class);
+      assertThatThrownBy(() -> service.delete(mine, as(READER))).isInstanceOf(QPermissionDeniedException.class);
 
-      Map<String, Object> copy = service.duplicate(mine, caller(READER));
+      Map<String, Object> copy = service.duplicate(mine, as(READER));
       assertThat(copy.get("title")).isEqualTo("Copy of Mine");
       assertThat(copy.get("ownerUserId")).isEqualTo(READER);
       assertThat(copy.get("visibility")).isEqualTo("PERSONAL");
 
-      assertThat(service.publish(mine, false, caller(WRITER)).get("visibility")).isEqualTo("PERSONAL");
-      assertThat(service.list("shared", caller(READER))).isEmpty();
+      assertThat(service.publish(mine, false, as(WRITER)).get("visibility")).isEqualTo("PERSONAL");
+      assertThat(service.list("shared", as(READER))).isEmpty();
 
-      service.delete(mine, caller(WRITER));
-      assertThatThrownBy(() -> service.get(mine, caller(WRITER))).isInstanceOf(QNotFoundException.class);
+      service.delete(mine, as(WRITER));
+      assertThatThrownBy(() -> service.get(mine, as(WRITER))).isInstanceOf(QNotFoundException.class);
    }
 
 
@@ -188,22 +188,22 @@ class NotebookServiceTest extends BaseSqlWorkbenchTest
    @Test
    void testValidation() throws Exception
    {
-      assertThatThrownBy(() -> service.create(body(" ", List.of()), caller(READER))).isInstanceOf(QBadRequestException.class);
-      assertThatThrownBy(() -> service.create(body("x", List.of(cell("a", "PYTHON", "x"))), caller(READER))).isInstanceOf(QBadRequestException.class);
+      assertThatThrownBy(() -> service.create(body(" ", List.of()), as(READER))).isInstanceOf(QBadRequestException.class);
+      assertThatThrownBy(() -> service.create(body("x", List.of(cell("a", "PYTHON", "x"))), as(READER))).isInstanceOf(QBadRequestException.class);
       Map<String, Object> notAList = body("x", null);
       notAList.put("cells", "nope");
-      assertThatThrownBy(() -> service.create(notAList, caller(READER))).isInstanceOf(QBadRequestException.class);
+      assertThatThrownBy(() -> service.create(notAList, as(READER))).isInstanceOf(QBadRequestException.class);
       Map<String, Object> notObjects = body("x", null);
       notObjects.put("cells", List.of("nope"));
-      assertThatThrownBy(() -> service.create(notObjects, caller(READER))).isInstanceOf(QBadRequestException.class);
+      assertThatThrownBy(() -> service.create(notObjects, as(READER))).isInstanceOf(QBadRequestException.class);
 
       List<Map<String, Object>> tooMany = new ArrayList<>();
       for(int i = 0; i <= NotebookService.MAX_CELLS; i++)
       {
          tooMany.add(cell("k" + i, "SQL", "SELECT 1"));
       }
-      assertThatThrownBy(() -> service.create(body("x", tooMany), caller(READER))).isInstanceOf(QBadRequestException.class);
-      assertThatThrownBy(() -> service.get(null, caller(READER))).isInstanceOf(QBadRequestException.class);
+      assertThatThrownBy(() -> service.create(body("x", tooMany), as(READER))).isInstanceOf(QBadRequestException.class);
+      assertThatThrownBy(() -> service.get(null, as(READER))).isInstanceOf(QBadRequestException.class);
 
       ///////////////////////////////////////////////////////
       // duplicate or missing keys are replaced by UUIDs   //
@@ -226,26 +226,26 @@ class NotebookServiceTest extends BaseSqlWorkbenchTest
    @SuppressWarnings("unchecked")
    void testSnapshots() throws Exception
    {
-      Integer id = (Integer) service.create(body("Snap", List.of(cell("c1", "SQL", "SELECT * FROM person"))), caller(READER)).get("id");
+      Integer id = (Integer) service.create(body("Snap", List.of(cell("c1", "SQL", "SELECT * FROM person"))), as(READER)).get("id");
 
       SqlExecutionEngine  engine   = new SqlExecutionEngine(qInstance, SqlWorkbenchRuntime.get(qInstance));
-      Map<String, Object> response = engine.execute(ExecutionRequest.readOnly(BACKEND_NAME, "SELECT * FROM person", Map.of()), caller(READER));
+      Map<String, Object> response = engine.execute(ExecutionRequest.readOnly(BACKEND_NAME, "SELECT * FROM person", Map.of()), as(READER));
       String              uuid     = (String) response.get("executionUuid");
 
-      assertThatThrownBy(() -> service.createSnapshot(id, Map.of("executionUuid", "missing"), caller(READER), null)).isInstanceOf(QNotFoundException.class);
+      assertThatThrownBy(() -> service.createSnapshot(id, Map.of("executionUuid", "missing"), as(READER), null)).isInstanceOf(QNotFoundException.class);
 
-      Map<String, Object> snapshot = service.createSnapshot(id, Map.of("executionUuid", uuid, "cellKey", "c1", "label", "people"), caller(READER), "SELECT * FROM person");
+      Map<String, Object> snapshot = service.createSnapshot(id, Map.of("executionUuid", uuid, "cellKey", "c1", "label", "people"), as(READER), "SELECT * FROM person");
       assertThat(snapshot.get("rowCount")).isEqualTo(2);
       assertThat(snapshot.get("truncated")).isEqualTo(true);
       assertThat(((List<?>) ((Map<String, Object>) snapshot.get("result")).get("rows"))).hasSize(2);
 
-      List<Map<String, Object>> snapshots = service.snapshots(id, caller(READER));
+      List<Map<String, Object>> snapshots = service.snapshots(id, as(READER));
       assertThat(snapshots).hasSize(1);
 
       Integer snapshotId = (Integer) snapshot.get("id");
-      assertThatThrownBy(() -> service.deleteSnapshot(id, 999, caller(READER))).isInstanceOf(QNotFoundException.class);
-      service.deleteSnapshot(id, snapshotId, caller(READER));
-      assertThat(service.snapshots(id, caller(READER))).isEmpty();
+      assertThatThrownBy(() -> service.deleteSnapshot(id, 999, as(READER))).isInstanceOf(QNotFoundException.class);
+      service.deleteSnapshot(id, snapshotId, as(READER));
+      assertThat(service.snapshots(id, as(READER))).isEmpty();
    }
 
 }

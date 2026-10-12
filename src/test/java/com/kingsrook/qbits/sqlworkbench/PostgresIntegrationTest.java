@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -41,12 +42,29 @@ import com.kingsrook.qbits.sqlworkbench.engine.SessionGuard;
 import com.kingsrook.qbits.sqlworkbench.engine.SqlExecutionEngine;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
 import com.kingsrook.qbits.sqlworkbench.notebook.NotebookService;
+import com.kingsrook.qqq.backend.core.model.session.QSession;
+import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.actions.tables.count.CountInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
+import com.kingsrook.qqq.backend.core.actions.tables.CountAction;
+import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
 import com.kingsrook.qbits.sqlworkbench.schema.SchemaIntrospector;
 import com.kingsrook.qbits.sqlworkbench.sql.SqlDialect;
 import com.kingsrook.qqq.backend.module.postgres.model.metadata.PostgreSQLBackendMetaData;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.C3P0PooledConnectionProvider;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.ConnectionManager;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.ConnectionPoolSettings;
+import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchHomeWidgetsMetaDataProducer;
+import com.kingsrook.qqq.backend.core.actions.dashboard.RenderWidgetAction;
+import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetInput;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.ChartData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.QWidgetData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.RawHTML;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.TableData;
+import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -117,7 +135,7 @@ class PostgresIntegrationTest
       try(Connection connection = java.sql.DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
           Statement statement = connection.createStatement())
       {
-         statement.execute("TRUNCATE sql_workbench_result_snapshot, sql_workbench_notebook_version, sql_workbench_cell, sql_workbench_notebook, sql_workbench_execution");
+         statement.execute("TRUNCATE sql_workbench_notebook_share, sql_workbench_result_snapshot, sql_workbench_notebook_version, sql_workbench_cell, sql_workbench_notebook, sql_workbench_execution");
          statement.execute("DROP TABLE IF EXISTS scratch");
       }
 
@@ -231,7 +249,7 @@ class PostgresIntegrationTest
          statement.execute("DELETE FROM person WHERE first_name = 'after'");
       }
 
-      List<SqlWorkbenchExecution> audits = QueryAction.execute(SqlWorkbenchExecution.TABLE_NAME, SqlWorkbenchExecution.class, new QQueryFilter());
+      List<SqlWorkbenchExecution> audits = SystemUser.call(() -> QueryAction.execute(SqlWorkbenchExecution.TABLE_NAME, SqlWorkbenchExecution.class, new QQueryFilter()));
       assertThat(audits).extracting(SqlWorkbenchExecution::getStatus).contains("SUCCEEDED", "TIMED_OUT");
    }
 
@@ -383,6 +401,95 @@ class PostgresIntegrationTest
             return (rs.getInt(1));
          }
       }
+   }
+
+
+   /*******************************************************************************
+    ** The record locks on PostgreSQL: owner / user share / library reads
+    ** through the core actions, one row per notebook even when it matches
+    ** several shares (SELECT DISTINCT / COUNT(DISTINCT) over TEXT columns),
+    ** and a reader cannot write a shared notebook's children.
+    *******************************************************************************/
+   @Test
+   void testRecordLocksOnPostgres() throws Exception
+   {
+      NotebookService notebooks = new NotebookService(SqlWorkbenchRuntime.get(qInstance));
+      login("writer-1");
+      Integer both     = (Integer) notebooks.create(Map.of("title", "Both", "description", "long text", "cells", List.of(Map.of("cellType", "SQL", "content", "SELECT 1"))), writer()).get("id");
+      Integer personal = (Integer) notebooks.create(Map.of("title", "Personal", "cells", List.of(Map.of("cellType", "SQL", "content", "SELECT 2"))), writer()).get("id");
+      notebooks.publish(both, true, writer());
+      QRecord share = new InsertAction().execute(new InsertInput(SqlWorkbenchNotebookShare.TABLE_NAME).withRecord(new QRecord()
+         .withValue("notebookId", both).withValue("audienceType", "USER").withValue("audienceId", "reader-2"))).getRecords().get(0);
+      assertThat(share.getErrors()).isNullOrEmpty();
+
+      login("reader-2");
+      assertThat(QueryAction.execute(SqlWorkbenchNotebook.TABLE_NAME, new QQueryFilter())).extracting(r -> r.getValueInteger("id")).containsExactly(both);
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchNotebook.TABLE_NAME)).getCount()).isEqualTo(1);
+      assertThat(QueryAction.execute(SqlWorkbenchCell.TABLE_NAME, new QQueryFilter())).hasSize(1);
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchCell.TABLE_NAME)).getCount()).isEqualTo(1);
+      assertThat(QueryAction.execute(SqlWorkbenchNotebookShare.TABLE_NAME, new QQueryFilter())).hasSize(2);
+      assertThat(new InsertAction().execute(new InsertInput(SqlWorkbenchCell.TABLE_NAME).withRecord(new QRecord().withValue("notebookId", both).withValue("content", "x")))
+         .getRecords().get(0).getErrors()).isNotEmpty();
+      assertThat(new InsertAction().execute(new InsertInput(SqlWorkbenchCell.TABLE_NAME).withRecord(new QRecord().withValue("notebookId", personal).withValue("content", "x")))
+         .getRecords().get(0).getErrors()).isNotEmpty();
+
+      login("admin-1");
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchNotebook.TABLE_NAME)).getCount()).isEqualTo(2);
+
+      login("writer-1");
+      notebooks.delete(both, writer());
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchNotebookShare.TABLE_NAME)).getCount()).isZero();
+   }
+
+
+
+   /*******************************************************************************
+    ** The home dashboard over real engine runs on Postgres (aggregates, IN
+    ** filters and timestamps through the RDBMS module): a reader sees their
+    ** own runs, an admin everyone's, including the committed write.
+    *******************************************************************************/
+   @Test
+   void testHomeDashboardOnPostgres() throws Exception
+   {
+      NotebookService notebooks = new NotebookService(SqlWorkbenchRuntime.get(qInstance));
+      login("writer-1");
+      Integer id = (Integer) notebooks.create(Map.of("title", "Dashboard source", "cells", List.of(Map.of("cellType", "SQL", "content", "SELECT 1"))), writer()).get("id");
+      engine.execute(new ExecutionRequest(BACKEND, "SELECT count(*) FROM person", Map.of(), false, id, null, null, null, false), writer());
+      String              sql     = "UPDATE person SET salary = salary + 0 WHERE salary IS NOT NULL";
+      Map<String, Object> preview = engine.execute(new ExecutionRequest(BACKEND, sql, Map.of(), true, null, null, null, null, false), writer());
+      engine.execute(new ExecutionRequest(BACKEND, sql, Map.of(), true, null, null, null, (String) preview.get("confirmToken"), false), writer());
+      login("reader-1");
+      engine.execute(new ExecutionRequest(BACKEND, "SELECT broken FROM nowhere", Map.of(), false, null, null, null, null, false), reader());
+
+      login("admin-1");
+      Map<String, String> html = new HashMap<>();
+      for(String name : SqlWorkbenchHomeWidgetsMetaDataProducer.homeWidgetNames())
+      {
+         QWidgetData data = new RenderWidgetAction().execute(new RenderWidgetInput().withWidgetMetaData((QWidgetMetaData) qInstance.getWidget(name))).getWidgetData();
+         html.put(name, data instanceof TableData table ? table.getRows().toString() : data instanceof RawHTML raw ? raw.getHtml() : String.valueOf(((ChartData) data).getSublabel()));
+      }
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.WRITES)).contains("UPDATE person", "<strong>2</strong>");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.FAILED)).contains("SELECT broken FROM nowhere");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.MOST_USED)).contains("Dashboard source");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.BY_USER)).contains("writer-1", "reader-1");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.SUMMARY)).contains("Writes, 30 Days", "2 rows affected");
+
+      login("reader-1");
+      TableData recent = (TableData) new RenderWidgetAction().execute(new RenderWidgetInput()
+         .withWidgetMetaData((QWidgetMetaData) qInstance.getWidget(SqlWorkbenchHomeWidgetsMetaDataProducer.RECENT_RUNS))).getWidgetData();
+      assertThat(recent.getRows().toString()).contains("SELECT broken").doesNotContain("UPDATE person");
+   }
+
+
+
+   /*******************************************************************************
+    ** Log in with the workbench security keys.
+    *******************************************************************************/
+   private void login(String userId)
+   {
+      QSession session = BaseSqlWorkbenchTest.TestSessionCustomizer.sessionFor(userId);
+      QContext.init(qInstance, session);
+      SqlWorkbenchSecurity.applyToSession(config, session, List.of());
    }
 
 }

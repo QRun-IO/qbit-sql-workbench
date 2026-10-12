@@ -17,6 +17,10 @@
 package com.kingsrook.qbits.sqlworkbench.engine;
 
 
+import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
+import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchSecurity;
+import com.kingsrook.qqq.backend.core.model.session.QSession;
+
 /*******************************************************************************
  ** Who is calling, and what they may do (resolved from the QSession by the
  ** API layer).
@@ -29,4 +33,16 @@ package com.kingsrook.qbits.sqlworkbench.engine;
  *******************************************************************************/
 public record Caller(String userId, String userName, boolean canWrite, boolean canShare, String clientIp)
 {
+
+   /*******************************************************************************
+    ** The Caller of a session (which must already be authenticated and hold
+    ** the access permission - the API and the record actions check that).
+    *******************************************************************************/
+   public static Caller fromSession(SqlWorkbenchQBitConfig config, QSession session, String clientIp)
+   {
+      String  userId   = SqlWorkbenchSecurity.userId(session);
+      boolean canWrite = Boolean.TRUE.equals(config.getWriteModeEnabled()) && session.hasPermission(config.getWritePermissionName());
+      boolean canShare = session.hasPermission(config.getSharePermissionName());
+      return (new Caller(userId, SqlWorkbenchSecurity.userName(session), canWrite, canShare, clientIp));
+   }
 }

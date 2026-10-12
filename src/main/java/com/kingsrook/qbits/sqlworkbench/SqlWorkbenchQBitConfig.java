@@ -22,6 +22,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookVersion;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
 import com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
@@ -41,9 +47,13 @@ import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaDat
  ** excludedBackendNames over the instance's RDBMS backends, optional
  ** readOnlyCredentials / writeCredentials per backend, and
  ** useBackendReadOnlyReplica. Permissions: accessPermissionBaseName
- ** (=> "sqlWorkbench.hasAccess"), writePermissionName, sharePermissionName,
- ** and adminPermissionBaseName (=> "sqlWorkbenchAdmin.hasAccess"), which
- ** alone grants the generic QQQ table UI / API over the qbit's tables.
+ ** (=> "sql_workbench.hasAccess"), writePermissionName, sharePermissionName,
+ ** and adminPermissionBaseName (=> "sql_workbench_admin.hasAccess", which
+ ** grants the all-access security key: every user's notebooks and the whole
+ ** audit). The tables use QQQ's per-table read / insert / edit / delete
+ ** permissions; getUserPermissionNames, getSharePermissionNames and
+ ** getAdminPermissionNames list what to grant per role, and
+ ** SqlWorkbenchSecurity.applyToSession puts the security keys in a session.
  ** Limits: timeouts, rows, bytes, statement counts, row guard, caches.
  **
  ** validate() is list-based and never throws; the producer fails production
@@ -51,10 +61,34 @@ import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaDat
  *******************************************************************************/
 public class SqlWorkbenchQBitConfig implements QBitConfig
 {
-   public static final String DEFAULT_ACCESS_PERMISSION_BASE_NAME = "sqlWorkbench";
-   public static final String DEFAULT_WRITE_PERMISSION_NAME       = "sqlWorkbench.write";
-   public static final String DEFAULT_SHARE_PERMISSION_NAME       = "sqlWorkbench.share";
-   public static final String DEFAULT_ADMIN_PERMISSION_BASE_NAME  = "sqlWorkbenchAdmin";
+   public static final String DEFAULT_ACCESS_PERMISSION_BASE_NAME = "sql_workbench";
+   public static final String DEFAULT_WRITE_PERMISSION_NAME       = "sql_workbench.write";
+   public static final String DEFAULT_SHARE_PERMISSION_NAME       = "sql_workbench.share";
+   public static final String DEFAULT_ADMIN_PERMISSION_BASE_NAME  = "sql_workbench_admin";
+
+   public static final String USER_SECURITY_KEY_TYPE_NAME     = "sql_workbench_user";
+   public static final String AUDIENCE_SECURITY_KEY_TYPE_NAME = "sql_workbench_audience";
+   public static final String ALL_ACCESS_SECURITY_KEY_NAME    = "sql_workbench_all_access";
+
+   ///////////////////////////////////////////////////////////////////////////
+   // names before 1.0.0-RC.3, when the owner rule (lowercase snake_case,   //
+   // prefixed with the qbit name) was applied; kept only so hosts can      //
+   // migrate stored references (see UPGRADE.md)                            //
+   ///////////////////////////////////////////////////////////////////////////
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_ACCESS_PERMISSION_BASE_NAME = "sqlWorkbench";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_WRITE_PERMISSION_NAME = "sqlWorkbench.write";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_SHARE_PERMISSION_NAME = "sqlWorkbench.share";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_ADMIN_PERMISSION_BASE_NAME = "sqlWorkbenchAdmin";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_USER_SECURITY_KEY_TYPE_NAME = "sqlWorkbenchUser";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_AUDIENCE_SECURITY_KEY_TYPE_NAME = "sqlWorkbenchAudience";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_ALL_ACCESS_SECURITY_KEY_NAME = "sqlWorkbenchAllAccess";
 
    private String backendName;
    private String tableNamePrefix;
@@ -218,11 +252,29 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
 
 
    /*******************************************************************************
-    ** Apply the table name prefix, if any.
+    ** Apply the table name prefix, if any. The prefix is normalized to
+    ** lowercase snake_case and joined with one "_", so a prefix of "ns",
+    ** "ns_" or "myNs" gives "ns_sql_workbench_notebook" or
+    ** "my_ns_sql_workbench_notebook".
     *******************************************************************************/
    public String applyPrefix(String name)
    {
-      return (StringUtils.hasContent(tableNamePrefix) ? tableNamePrefix + "_" + name : name);
+      if(!StringUtils.hasContent(tableNamePrefix))
+      {
+         return (name);
+      }
+      return (normalizePrefix(tableNamePrefix) + "_" + name);
+   }
+
+
+
+   /*******************************************************************************
+    ** Lowercase snake_case form of a prefix, without leading or trailing "_".
+    *******************************************************************************/
+   static String normalizePrefix(String prefix)
+   {
+      String snake = prefix.trim().replaceAll("([a-z0-9])([A-Z])", "$1_$2").replaceAll("[^A-Za-z0-9]+", "_").toLowerCase();
+      return (snake.replaceAll("^_+", "").replaceAll("_+$", ""));
    }
 
 
@@ -262,17 +314,130 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
 
 
    /*******************************************************************************
-    ** Permission rules for the qbit's tables: has-access on the admin base
-    ** name. Ordinary workbench users do not hold it, so the generic QQQ table
-    ** UI / API (/qqq/v1/table/...) cannot read other users' notebooks,
-    ** snapshots or the execution audit; the workbench's own endpoints read
-    ** and write these tables as the system user after their own owner /
-    ** visibility checks.
+    ** Permission rules for the admin-only surface: has-access on the admin
+    ** base name.
     *******************************************************************************/
    @JsonIgnore
    public QPermissionRules getAdminPermissionRules()
    {
       return (new QPermissionRules().withLevel(PermissionLevel.HAS_ACCESS_PERMISSION).withPermissionBaseName(adminPermissionBaseName));
+   }
+
+
+
+   /*******************************************************************************
+    ** Permission rules for the qbit's tables: QQQ's standard per-table
+    ** read / insert / edit / delete permissions ("<tableName>.read", ...).
+    ** Which rows a user sees and may change is decided by the tables' record
+    ** security locks (owner, shares, admin all-access), not by these.
+    *******************************************************************************/
+   @JsonIgnore
+   public QPermissionRules getTablePermissionRules()
+   {
+      return (new QPermissionRules().withLevel(PermissionLevel.READ_INSERT_EDIT_DELETE_PERMISSIONS));
+   }
+
+
+
+   /*******************************************************************************
+    ** Security key type whose session value is the user's id; the owner
+    ** locks match it.
+    *******************************************************************************/
+   @JsonIgnore
+   public String getUserSecurityKeyTypeName()
+   {
+      return (applyPrefix(USER_SECURITY_KEY_TYPE_NAME));
+   }
+
+
+
+   /*******************************************************************************
+    ** Security key type whose session values are the user's audience keys
+    ** ("user:<id>", "group:<name>", "all"); the share locks match it.
+    *******************************************************************************/
+   @JsonIgnore
+   public String getAudienceSecurityKeyTypeName()
+   {
+      return (applyPrefix(AUDIENCE_SECURITY_KEY_TYPE_NAME));
+   }
+
+
+
+   /*******************************************************************************
+    ** All-access key of the user key type: true for workbench admins.
+    *******************************************************************************/
+   @JsonIgnore
+   public String getAllAccessSecurityKeyName()
+   {
+      return (applyPrefix(ALL_ACCESS_SECURITY_KEY_NAME));
+   }
+
+
+
+   /*******************************************************************************
+    ** Every permission an ordinary workbench user needs: the access
+    ** permission, read / insert / edit / delete on notebooks and cells, read
+    ** on versions, shares and the execution audit, and read / edit (label) /
+    ** delete on pinned snapshots. Record locks narrow every one of these to
+    ** the user's own (or shared-with-them, for reads) rows.
+    *******************************************************************************/
+   @JsonIgnore
+   public List<String> getUserPermissionNames()
+   {
+      List<String> names = new ArrayList<>();
+      names.add(getAccessPermissionName());
+      addTablePermissions(names, SqlWorkbenchNotebook.TABLE_NAME, "read", "insert", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchCell.TABLE_NAME, "read", "insert", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchNotebookVersion.TABLE_NAME, "read");
+      addTablePermissions(names, SqlWorkbenchResultSnapshot.TABLE_NAME, "read", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchNotebookShare.TABLE_NAME, "read");
+      addTablePermissions(names, SqlWorkbenchExecution.TABLE_NAME, "read");
+      return (names);
+   }
+
+
+
+   /*******************************************************************************
+    ** Permissions to share one's notebooks (with users, groups, or the shared
+    ** library): the share permission plus insert / edit / delete on the share
+    ** table.
+    *******************************************************************************/
+   @JsonIgnore
+   public List<String> getSharePermissionNames()
+   {
+      List<String> names = new ArrayList<>();
+      names.add(sharePermissionName);
+      addTablePermissions(names, SqlWorkbenchNotebookShare.TABLE_NAME, "insert", "edit", "delete");
+      return (names);
+   }
+
+
+
+   /*******************************************************************************
+    ** Permissions for a workbench admin: everything a user has plus the admin
+    ** permission, which (through SqlWorkbenchSecurity.applyToSession) puts the
+    ** all-access key in the session - every user's notebooks and the whole
+    ** execution audit. Versions and the audit stay append-only for admins.
+    *******************************************************************************/
+   @JsonIgnore
+   public List<String> getAdminPermissionNames()
+   {
+      List<String> names = new ArrayList<>(getUserPermissionNames());
+      names.add(getAdminPermissionName());
+      return (names);
+   }
+
+
+
+   /*******************************************************************************
+    **
+    *******************************************************************************/
+   private void addTablePermissions(List<String> names, String table, String... suffixes)
+   {
+      for(String suffix : suffixes)
+      {
+         names.add(applyPrefix(table) + "." + suffix);
+      }
    }
 
 

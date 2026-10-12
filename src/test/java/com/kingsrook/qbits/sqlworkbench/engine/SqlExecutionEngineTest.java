@@ -29,6 +29,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qbits.sqlworkbench.BaseSqlWorkbenchTest;
+import com.kingsrook.qbits.sqlworkbench.SystemUser;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,7 +74,7 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
     *******************************************************************************/
    private List<SqlWorkbenchExecution> audits() throws Exception
    {
-      return (QueryAction.execute(SqlWorkbenchExecution.TABLE_NAME, SqlWorkbenchExecution.class, new QQueryFilter()));
+      return (SystemUser.call(() -> QueryAction.execute(SqlWorkbenchExecution.TABLE_NAME, SqlWorkbenchExecution.class, new QQueryFilter())));
    }
 
 
