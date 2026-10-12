@@ -19,6 +19,7 @@ package com.kingsrook.qbits.sqlworkbench.metadata;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchPermissionChecker;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.model.ShareAudienceType;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
@@ -26,7 +27,6 @@ import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookVersion;
 import com.kingsrook.qbits.sqlworkbench.processes.SqlWorkbenchRecordActionSteps;
 import com.kingsrook.qqq.backend.core.actions.permissions.TablePermissionSubType;
-import com.kingsrook.qqq.backend.core.actions.permissions.UseTablePermissionCustomPermissionChecker;
 import com.kingsrook.qqq.backend.core.actions.processes.BackendStep;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
@@ -121,7 +121,7 @@ public class SqlWorkbenchRecordActionsMetaDataProducer extends QBitComponentMeta
          .withMaxInputRecords(1)
          .withPermissionRules(new QPermissionRules()
             .withLevel(PermissionLevel.HAS_ACCESS_PERMISSION)
-            .withCustomPermissionChecker(UseTablePermissionCustomPermissionChecker.build(permissionTable, permission)))
+            .withCustomPermissionChecker(SqlWorkbenchPermissionChecker.requiring(permissionTable + "." + permission.getPermissionSuffix())))
          .withStepList(steps));
    }
 

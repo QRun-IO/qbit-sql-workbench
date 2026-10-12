@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData;
+import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppMetaData;
@@ -91,6 +92,16 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       }
       assertThat(qInstance.getSecurityKeyType("sqlWorkbenchUser").getAllAccessKeyName()).isEqualTo("sqlWorkbenchAllAccess");
       assertThat(qInstance.getSecurityKeyType("sqlWorkbenchAudience")).isNotNull();
+
+      ////////////////////////////////////////////////////////////////////////
+      // role-management UIs list available permissions without a QContext //
+      // instance; the record actions must not break that                  //
+      ////////////////////////////////////////////////////////////////////////
+      QContext.clear();
+      assertThat(com.kingsrook.qqq.backend.core.actions.permissions.PermissionsHelper.getAllAvailablePermissionNames(qInstance))
+         .contains("sqlWorkbenchNotebook.read", "sqlWorkbenchNotebookShare.insert", "sqlWorkbench.hasAccess")
+         .doesNotContain("sqlWorkbenchExecution.delete", "sqlWorkbenchNotebookVersion.insert");
+      loginAs(READER);
 
       QWidgetMetaData widget = (QWidgetMetaData) qInstance.getWidget(SqlWorkbenchWidgetMetaDataProducer.NAME);
       assertThat(widget.getType()).isEqualTo("SQL_WORKBENCH");
