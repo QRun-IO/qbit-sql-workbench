@@ -22,6 +22,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookVersion;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
 import com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
@@ -41,8 +47,8 @@ import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaDat
  ** excludedBackendNames over the instance's RDBMS backends, optional
  ** readOnlyCredentials / writeCredentials per backend, and
  ** useBackendReadOnlyReplica. Permissions: accessPermissionBaseName
- ** (=> "sqlWorkbench.hasAccess"), writePermissionName, sharePermissionName,
- ** and adminPermissionBaseName (=> "sqlWorkbenchAdmin.hasAccess", which
+ ** (=> "sql_workbench.hasAccess"), writePermissionName, sharePermissionName,
+ ** and adminPermissionBaseName (=> "sql_workbench_admin.hasAccess", which
  ** grants the all-access security key: every user's notebooks and the whole
  ** audit). The tables use QQQ's per-table read / insert / edit / delete
  ** permissions; getUserPermissionNames, getSharePermissionNames and
@@ -55,10 +61,34 @@ import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSBackendMetaDat
  *******************************************************************************/
 public class SqlWorkbenchQBitConfig implements QBitConfig
 {
-   public static final String DEFAULT_ACCESS_PERMISSION_BASE_NAME = "sqlWorkbench";
-   public static final String DEFAULT_WRITE_PERMISSION_NAME       = "sqlWorkbench.write";
-   public static final String DEFAULT_SHARE_PERMISSION_NAME       = "sqlWorkbench.share";
-   public static final String DEFAULT_ADMIN_PERMISSION_BASE_NAME  = "sqlWorkbenchAdmin";
+   public static final String DEFAULT_ACCESS_PERMISSION_BASE_NAME = "sql_workbench";
+   public static final String DEFAULT_WRITE_PERMISSION_NAME       = "sql_workbench.write";
+   public static final String DEFAULT_SHARE_PERMISSION_NAME       = "sql_workbench.share";
+   public static final String DEFAULT_ADMIN_PERMISSION_BASE_NAME  = "sql_workbench_admin";
+
+   public static final String USER_SECURITY_KEY_TYPE_NAME     = "sql_workbench_user";
+   public static final String AUDIENCE_SECURITY_KEY_TYPE_NAME = "sql_workbench_audience";
+   public static final String ALL_ACCESS_SECURITY_KEY_NAME    = "sql_workbench_all_access";
+
+   ///////////////////////////////////////////////////////////////////////////
+   // names before 1.0.0-RC.3, when the owner rule (lowercase snake_case,   //
+   // prefixed with the qbit name) was applied; kept only so hosts can      //
+   // migrate stored references (see UPGRADE.md)                            //
+   ///////////////////////////////////////////////////////////////////////////
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_ACCESS_PERMISSION_BASE_NAME = "sqlWorkbench";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_WRITE_PERMISSION_NAME = "sqlWorkbench.write";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_SHARE_PERMISSION_NAME = "sqlWorkbench.share";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_ADMIN_PERMISSION_BASE_NAME = "sqlWorkbenchAdmin";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_USER_SECURITY_KEY_TYPE_NAME = "sqlWorkbenchUser";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_AUDIENCE_SECURITY_KEY_TYPE_NAME = "sqlWorkbenchAudience";
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_ALL_ACCESS_SECURITY_KEY_NAME = "sqlWorkbenchAllAccess";
 
    private String backendName;
    private String tableNamePrefix;
@@ -222,11 +252,29 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
 
 
    /*******************************************************************************
-    ** Apply the table name prefix, if any.
+    ** Apply the table name prefix, if any. The prefix is normalized to
+    ** lowercase snake_case and joined with one "_", so a prefix of "ns",
+    ** "ns_" or "myNs" gives "ns_sql_workbench_notebook" or
+    ** "my_ns_sql_workbench_notebook".
     *******************************************************************************/
    public String applyPrefix(String name)
    {
-      return (StringUtils.hasContent(tableNamePrefix) ? tableNamePrefix + "_" + name : name);
+      if(!StringUtils.hasContent(tableNamePrefix))
+      {
+         return (name);
+      }
+      return (normalizePrefix(tableNamePrefix) + "_" + name);
+   }
+
+
+
+   /*******************************************************************************
+    ** Lowercase snake_case form of a prefix, without leading or trailing "_".
+    *******************************************************************************/
+   static String normalizePrefix(String prefix)
+   {
+      String snake = prefix.trim().replaceAll("([a-z0-9])([A-Z])", "$1_$2").replaceAll("[^A-Za-z0-9]+", "_").toLowerCase();
+      return (snake.replaceAll("^_+", "").replaceAll("_+$", ""));
    }
 
 
@@ -298,7 +346,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    @JsonIgnore
    public String getUserSecurityKeyTypeName()
    {
-      return (applyPrefix("sqlWorkbenchUser"));
+      return (applyPrefix(USER_SECURITY_KEY_TYPE_NAME));
    }
 
 
@@ -310,7 +358,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    @JsonIgnore
    public String getAudienceSecurityKeyTypeName()
    {
-      return (applyPrefix("sqlWorkbenchAudience"));
+      return (applyPrefix(AUDIENCE_SECURITY_KEY_TYPE_NAME));
    }
 
 
@@ -321,7 +369,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    @JsonIgnore
    public String getAllAccessSecurityKeyName()
    {
-      return (applyPrefix("sqlWorkbenchAllAccess"));
+      return (applyPrefix(ALL_ACCESS_SECURITY_KEY_NAME));
    }
 
 
@@ -338,12 +386,12 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    {
       List<String> names = new ArrayList<>();
       names.add(getAccessPermissionName());
-      addTablePermissions(names, "sqlWorkbenchNotebook", "read", "insert", "edit", "delete");
-      addTablePermissions(names, "sqlWorkbenchCell", "read", "insert", "edit", "delete");
-      addTablePermissions(names, "sqlWorkbenchNotebookVersion", "read");
-      addTablePermissions(names, "sqlWorkbenchResultSnapshot", "read", "edit", "delete");
-      addTablePermissions(names, "sqlWorkbenchNotebookShare", "read");
-      addTablePermissions(names, "sqlWorkbenchExecution", "read");
+      addTablePermissions(names, SqlWorkbenchNotebook.TABLE_NAME, "read", "insert", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchCell.TABLE_NAME, "read", "insert", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchNotebookVersion.TABLE_NAME, "read");
+      addTablePermissions(names, SqlWorkbenchResultSnapshot.TABLE_NAME, "read", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchNotebookShare.TABLE_NAME, "read");
+      addTablePermissions(names, SqlWorkbenchExecution.TABLE_NAME, "read");
       return (names);
    }
 
@@ -359,7 +407,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    {
       List<String> names = new ArrayList<>();
       names.add(sharePermissionName);
-      addTablePermissions(names, "sqlWorkbenchNotebookShare", "insert", "edit", "delete");
+      addTablePermissions(names, SqlWorkbenchNotebookShare.TABLE_NAME, "insert", "edit", "delete");
       return (names);
    }
 

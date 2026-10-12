@@ -72,9 +72,9 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  ** - Record security locks, enforced by the core actions and so for every
  **   entry point (table UI, /qqq/v1 table API, processes, PVS lookups,
  **   exports): a notebook (and its cells, versions and snapshots) is visible
- **   to its owner (sqlWorkbenchUser = ownerUserId) OR to an audience it is
+ **   to its owner (sql_workbench_user = ownerUserId) OR to an audience it is
  **   shared with (a share row whose audienceKey is one of the session's
- **   sqlWorkbenchAudience values); only the owner can change it. An
+ **   sql_workbench_audience values); only the owner can change it. An
  **   execution is visible to its user only. Workbench admins hold the
  **   all-access key and see every row.
  ** - Append-only: versions and the execution audit have no insert / edit /
@@ -86,16 +86,16 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  *******************************************************************************/
 public class SqlWorkbenchTableMetaDataHelper
 {
-   public static final String JOIN_NOTEBOOK_CELL     = "sqlWorkbenchNotebookJoinSqlWorkbenchCell";
-   public static final String JOIN_NOTEBOOK_VERSION  = "sqlWorkbenchNotebookJoinSqlWorkbenchNotebookVersion";
-   public static final String JOIN_NOTEBOOK_SNAPSHOT = "sqlWorkbenchNotebookJoinSqlWorkbenchResultSnapshot";
-   public static final String JOIN_NOTEBOOK_SHARE    = "sqlWorkbenchNotebookJoinSqlWorkbenchNotebookShare";
-   public static final String JOIN_SHARE_NOTEBOOK    = "sqlWorkbenchNotebookShareJoinSqlWorkbenchNotebook";
+   public static final String JOIN_NOTEBOOK_CELL     = "sql_workbench_notebook_join_sql_workbench_cell";
+   public static final String JOIN_NOTEBOOK_VERSION  = "sql_workbench_notebook_join_sql_workbench_notebook_version";
+   public static final String JOIN_NOTEBOOK_SNAPSHOT = "sql_workbench_notebook_join_sql_workbench_result_snapshot";
+   public static final String JOIN_NOTEBOOK_SHARE    = "sql_workbench_notebook_join_sql_workbench_notebook_share";
+   public static final String JOIN_SHARE_NOTEBOOK    = "sql_workbench_notebook_share_join_sql_workbench_notebook";
 
 
 
    /*******************************************************************************
-    ** sqlWorkbenchNotebook
+    ** sql_workbench_notebook
     *******************************************************************************/
    public static QTableMetaData buildNotebookTable(SqlWorkbenchQBitConfig config) throws QException
    {
@@ -125,7 +125,7 @@ public class SqlWorkbenchTableMetaDataHelper
 
 
    /*******************************************************************************
-    ** sqlWorkbenchCell
+    ** sql_workbench_cell
     *******************************************************************************/
    public static QTableMetaData buildCellTable(SqlWorkbenchQBitConfig config) throws QException
    {
@@ -148,7 +148,7 @@ public class SqlWorkbenchTableMetaDataHelper
 
 
    /*******************************************************************************
-    ** sqlWorkbenchNotebookVersion (append-only)
+    ** sql_workbench_notebook_version (append-only)
     *******************************************************************************/
    public static QTableMetaData buildNotebookVersionTable(SqlWorkbenchQBitConfig config) throws QException
    {
@@ -169,7 +169,7 @@ public class SqlWorkbenchTableMetaDataHelper
 
 
    /*******************************************************************************
-    ** sqlWorkbenchResultSnapshot (pinned from the notebook UI; label edit and
+    ** sql_workbench_result_snapshot (pinned from the notebook UI; label edit and
     ** delete through the table)
     *******************************************************************************/
    public static QTableMetaData buildResultSnapshotTable(SqlWorkbenchQBitConfig config) throws QException
@@ -191,7 +191,7 @@ public class SqlWorkbenchTableMetaDataHelper
 
 
    /*******************************************************************************
-    ** sqlWorkbenchNotebookShare: who, besides the owner, can read a notebook.
+    ** sql_workbench_notebook_share: who, besides the owner, can read a notebook.
     *******************************************************************************/
    public static QTableMetaData buildNotebookShareTable(SqlWorkbenchQBitConfig config) throws QException
    {
@@ -213,7 +213,7 @@ public class SqlWorkbenchTableMetaDataHelper
 
 
    /*******************************************************************************
-    ** sqlWorkbenchExecution (the audit; append-only)
+    ** sql_workbench_execution (the audit; append-only)
     *******************************************************************************/
    public static QTableMetaData buildExecutionTable(SqlWorkbenchQBitConfig config) throws QException
    {
@@ -356,7 +356,7 @@ public class SqlWorkbenchTableMetaDataHelper
 
 
    /*******************************************************************************
-    ** Owner lock: the session's sqlWorkbenchUser value must equal the field
+    ** Owner lock: the session's sql_workbench_user value must equal the field
     ** (read and write).
     *******************************************************************************/
    static RecordSecurityLock ownerLock(SqlWorkbenchQBitConfig config, String fieldName, String... joinNameChain)
@@ -376,7 +376,7 @@ public class SqlWorkbenchTableMetaDataHelper
 
    /*******************************************************************************
     ** Share lock: a share row's audienceKey is one of the session's
-    ** sqlWorkbenchAudience values (read only).
+    ** sql_workbench_audience values (read only).
     *******************************************************************************/
    static RecordSecurityLock shareLock(SqlWorkbenchQBitConfig config, String fieldName, String... joinNameChain)
    {

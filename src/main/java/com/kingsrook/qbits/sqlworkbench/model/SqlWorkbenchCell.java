@@ -29,7 +29,14 @@ import com.kingsrook.qqq.backend.core.model.metadata.fields.ValueTooLongBehavior
  *******************************************************************************/
 public class SqlWorkbenchCell extends QRecordEntity
 {
-   public static final String TABLE_NAME = "sqlWorkbenchCell";
+   public static final String TABLE_NAME = "sql_workbench_cell";
+
+   /*******************************************************************************
+    ** The table name before 1.0.0-RC.3 (owner rule: lowercase snake_case,
+    ** prefixed with the qbit name). Kept for migrating stored references only.
+    *******************************************************************************/
+   @Deprecated(since = "1.0.0-RC.3")
+   public static final String LEGACY_TABLE_NAME = "sqlWorkbenchCell";
 
    @QField(isEditable = false, isPrimaryKey = true)
    private Integer id;

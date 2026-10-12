@@ -25,7 +25,7 @@ import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 
 
 /*******************************************************************************
- ** Produces the sqlWorkbenchNotebookVersion table.
+ ** Produces the sql_workbench_notebook_version table.
  *******************************************************************************/
 public class SqlWorkbenchNotebookVersionTableMetaDataProducer extends QBitComponentMetaDataProducer<QTableMetaData, SqlWorkbenchQBitConfig>
 {
