@@ -27,9 +27,12 @@ import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
+import com.kingsrook.qqq.backend.core.model.metadata.processes.QProcessMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qqq.backend.core.modules.backend.implementations.memory.MemoryBackendModule;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchAppMetaDataProducer;
+import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchHomeWidgetsMetaDataProducer;
+import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchRunnerAppMetaDataProducer;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchWidgetMetaDataProducer;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchWidgetRenderer;
 import com.kingsrook.qbits.sqlworkbench.model.ShareAudienceType;
@@ -112,15 +115,22 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       assertThat(widget.getType()).isEqualTo("SQL_WORKBENCH");
 
       QAppMetaData app = qInstance.getApp(SqlWorkbenchAppMetaDataProducer.APP_NAME);
-      assertThat(app.getWidgets()).containsExactly(SqlWorkbenchWidgetMetaDataProducer.NAME);
-      assertThat(app.getChildren()).extracting(c -> c.getName()).containsExactly("sql_workbench_notebook", "sql_workbench_cell", "sql_workbench_notebook_share",
-         "sql_workbench_result_snapshot", "sql_workbench_notebook_version", "sql_workbench_execution");
+      assertThat(app.getWidgets()).containsExactlyElementsOf(SqlWorkbenchHomeWidgetsMetaDataProducer.homeWidgetNames());
+      assertThat(app.getWidgets()).allSatisfy(name -> assertThat(qInstance.getWidget(name)).isNotNull());
       assertThat(app.getPermissionRules().getPermissionBaseName()).isEqualTo("sql_workbench");
-      ///////////////////////////////////////////////////////////////////
-      // the qbit's own processes are record actions on its tables and //
-      // never app children (the nav only lists tables and the widget) //
-      ///////////////////////////////////////////////////////////////////
-      assertThat(app.getChildren()).allSatisfy(child -> assertThat(child).isInstanceOf(QTableMetaData.class));
+
+      ////////////////////////////////////////////////////////////////////////
+      // nav: the Runner (a child app showing the notebook widget), then the //
+      // main tables only; the qbit's processes are record actions, never   //
+      // nav children                                                        //
+      ////////////////////////////////////////////////////////////////////////
+      assertThat(app.getChildren()).extracting(c -> c.getName()).containsExactly("sqlWorkbenchRunner", "sql_workbench_notebook", "sql_workbench_execution");
+      QAppMetaData runner = qInstance.getApp(SqlWorkbenchRunnerAppMetaDataProducer.APP_NAME);
+      assertThat(runner.getLabel()).isEqualTo("Runner");
+      assertThat(runner.getWidgets()).containsExactly(SqlWorkbenchWidgetMetaDataProducer.NAME);
+      assertThat(runner.getChildren()).isNullOrEmpty();
+      assertThat(runner.getPermissionRules().getPermissionBaseName()).isEqualTo("sql_workbench");
+      assertThat(app.getChildren()).noneMatch(child -> child instanceof QProcessMetaData);
 
       assertThat(QJavalinMetaData.of(qInstance).getAdditionalRouteProviderReferences()).isNotEmpty();
       assertThat(SqlWorkbenchRuntime.get(qInstance)).isNotNull();

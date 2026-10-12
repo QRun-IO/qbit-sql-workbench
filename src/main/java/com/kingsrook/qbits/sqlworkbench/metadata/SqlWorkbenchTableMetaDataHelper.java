@@ -86,11 +86,12 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.UniqueKey;
  *******************************************************************************/
 public class SqlWorkbenchTableMetaDataHelper
 {
-   public static final String JOIN_NOTEBOOK_CELL     = "sql_workbench_notebook_join_sql_workbench_cell";
-   public static final String JOIN_NOTEBOOK_VERSION  = "sql_workbench_notebook_join_sql_workbench_notebook_version";
-   public static final String JOIN_NOTEBOOK_SNAPSHOT = "sql_workbench_notebook_join_sql_workbench_result_snapshot";
-   public static final String JOIN_NOTEBOOK_SHARE    = "sql_workbench_notebook_join_sql_workbench_notebook_share";
-   public static final String JOIN_SHARE_NOTEBOOK    = "sql_workbench_notebook_share_join_sql_workbench_notebook";
+   public static final String JOIN_NOTEBOOK_CELL      = "sql_workbench_notebook_join_sql_workbench_cell";
+   public static final String JOIN_NOTEBOOK_VERSION   = "sql_workbench_notebook_join_sql_workbench_notebook_version";
+   public static final String JOIN_NOTEBOOK_SNAPSHOT  = "sql_workbench_notebook_join_sql_workbench_result_snapshot";
+   public static final String JOIN_NOTEBOOK_SHARE     = "sql_workbench_notebook_join_sql_workbench_notebook_share";
+   public static final String JOIN_SHARE_NOTEBOOK     = "sql_workbench_notebook_share_join_sql_workbench_notebook";
+   public static final String JOIN_NOTEBOOK_EXECUTION = "sql_workbench_notebook_join_sql_workbench_execution";
 
 
 
@@ -107,12 +108,14 @@ public class SqlWorkbenchTableMetaDataHelper
             .withLock(ownerLock(config, "ownerUserId"))
             .withLock(shareLock(config, config.applyPrefix(SqlWorkbenchNotebookShare.TABLE_NAME) + ".audienceKey", config.applyPrefix(JOIN_SHARE_NOTEBOOK))))
          .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.RECORD))
-         .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1, List.of("id", "title", "visibility", "ownerName")))
-         .withSection(new QFieldSection("details", new QIcon("description"), Tier.T2, List.of("description", "defaultBackendName", "parametersJson")))
+         .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1, List.of("id", "title", "description", "ownerName", "visibility")))
+         .withSection(new QFieldSection("runner", new QIcon("play_circle"), Tier.T2).withWidgetName(config.applyPrefix(SqlWorkbenchHomeWidgetsMetaDataProducer.NOTEBOOK_RUNNER)))
+         .withSection(new QFieldSection("details", new QIcon("description"), Tier.T2, List.of("defaultBackendName", "parametersJson")))
          .withSection(widgetSection(config, JOIN_NOTEBOOK_CELL, "notes"))
          .withSection(widgetSection(config, JOIN_NOTEBOOK_SHARE, "share"))
          .withSection(widgetSection(config, JOIN_NOTEBOOK_SNAPSHOT, "push_pin"))
          .withSection(widgetSection(config, JOIN_NOTEBOOK_VERSION, "history"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_EXECUTION, "policy"))
          .withSection(new QFieldSection("system", new QIcon("calendar_month"), Tier.T3, List.of("ownerUserId", "currentVersion", "createDate", "modifyDate")));
       table.getField("visibility").setIsEditable(false);
       table.getField("visibility").setIsRequired(false);
@@ -269,8 +272,10 @@ public class SqlWorkbenchTableMetaDataHelper
 
 
    /*******************************************************************************
-    ** The joins: notebook to each child (one-to-many), and share to notebook
-    ** (many-to-one, the direction the share locks walk).
+    ** The joins: notebook to each child (one-to-many), notebook to its runs in
+    ** the execution audit (one-to-many; the audit is not foreign-keyed, so it
+    ** outlives the notebook), and share to notebook (many-to-one, the
+    ** direction the share locks walk).
     *******************************************************************************/
    public static List<QJoinMetaData> buildJoins(SqlWorkbenchQBitConfig config)
    {
@@ -280,6 +285,7 @@ public class SqlWorkbenchTableMetaDataHelper
       children.put(JOIN_NOTEBOOK_VERSION, SqlWorkbenchNotebookVersion.TABLE_NAME);
       children.put(JOIN_NOTEBOOK_SNAPSHOT, SqlWorkbenchResultSnapshot.TABLE_NAME);
       children.put(JOIN_NOTEBOOK_SHARE, SqlWorkbenchNotebookShare.TABLE_NAME);
+      children.put(JOIN_NOTEBOOK_EXECUTION, SqlWorkbenchExecution.TABLE_NAME);
 
       List<QJoinMetaData> joins = new ArrayList<>();
       for(Map.Entry<String, String> entry : children.entrySet())
@@ -305,7 +311,8 @@ public class SqlWorkbenchTableMetaDataHelper
    /*******************************************************************************
     ** Child-record list widgets on the notebook's record view: cells (add and
     ** edit in place), shares (add, for users who may share), pinned results,
-    ** versions.
+    ** versions, and runs (the notebook's executions the viewer may see: their
+    ** own, or everyone's for workbench admins).
     *******************************************************************************/
    public static List<QWidgetMetaDataInterface> buildChildListWidgets(SqlWorkbenchQBitConfig config)
    {
@@ -331,6 +338,10 @@ public class SqlWorkbenchTableMetaDataHelper
       widgets.add(ChildRecordListRenderer.widgetMetaDataBuilder(joins.get(config.applyPrefix(JOIN_NOTEBOOK_VERSION)))
          .withLabel("Versions").withMaxRows(25)
          .withOnlyIncludeFieldNames(List.of("id", "versionNumber", "comment", "savedByName", "createDate"))
+         .getWidgetMetaData());
+      widgets.add(ChildRecordListRenderer.widgetMetaDataBuilder(joins.get(config.applyPrefix(JOIN_NOTEBOOK_EXECUTION)))
+         .withLabel("Runs").withMaxRows(25)
+         .withOnlyIncludeFieldNames(List.of("id", "startTime", "userName", "mode", "status", "durationMs", "rowsReturned", "rowsAffected", "cellKey"))
          .getWidgetMetaData());
       return (widgets);
    }

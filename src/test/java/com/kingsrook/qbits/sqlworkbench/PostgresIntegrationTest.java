@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -56,6 +57,14 @@ import com.kingsrook.qqq.backend.module.postgres.model.metadata.PostgreSQLBacken
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.C3P0PooledConnectionProvider;
 import com.kingsrook.qqq.backend.module.rdbms.jdbc.ConnectionManager;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.ConnectionPoolSettings;
+import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchHomeWidgetsMetaDataProducer;
+import com.kingsrook.qqq.backend.core.actions.dashboard.RenderWidgetAction;
+import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetInput;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.ChartData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.QWidgetData;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.RawHTML;
+import com.kingsrook.qqq.backend.core.model.dashboard.widgets.TableData;
+import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -430,6 +439,45 @@ class PostgresIntegrationTest
       login("writer-1");
       notebooks.delete(both, writer());
       assertThat(new CountAction().execute(new CountInput(SqlWorkbenchNotebookShare.TABLE_NAME)).getCount()).isZero();
+   }
+
+
+
+   /*******************************************************************************
+    ** The home dashboard over real engine runs on Postgres (aggregates, IN
+    ** filters and timestamps through the RDBMS module): a reader sees their
+    ** own runs, an admin everyone's, including the committed write.
+    *******************************************************************************/
+   @Test
+   void testHomeDashboardOnPostgres() throws Exception
+   {
+      NotebookService notebooks = new NotebookService(SqlWorkbenchRuntime.get(qInstance));
+      login("writer-1");
+      Integer id = (Integer) notebooks.create(Map.of("title", "Dashboard source", "cells", List.of(Map.of("cellType", "SQL", "content", "SELECT 1"))), writer()).get("id");
+      engine.execute(new ExecutionRequest(BACKEND, "SELECT count(*) FROM person", Map.of(), false, id, null, null, null, false), writer());
+      String              sql     = "UPDATE person SET salary = salary + 0 WHERE salary IS NOT NULL";
+      Map<String, Object> preview = engine.execute(new ExecutionRequest(BACKEND, sql, Map.of(), true, null, null, null, null, false), writer());
+      engine.execute(new ExecutionRequest(BACKEND, sql, Map.of(), true, null, null, null, (String) preview.get("confirmToken"), false), writer());
+      login("reader-1");
+      engine.execute(new ExecutionRequest(BACKEND, "SELECT broken FROM nowhere", Map.of(), false, null, null, null, null, false), reader());
+
+      login("admin-1");
+      Map<String, String> html = new HashMap<>();
+      for(String name : SqlWorkbenchHomeWidgetsMetaDataProducer.homeWidgetNames())
+      {
+         QWidgetData data = new RenderWidgetAction().execute(new RenderWidgetInput().withWidgetMetaData((QWidgetMetaData) qInstance.getWidget(name))).getWidgetData();
+         html.put(name, data instanceof TableData table ? table.getRows().toString() : data instanceof RawHTML raw ? raw.getHtml() : String.valueOf(((ChartData) data).getSublabel()));
+      }
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.WRITES)).contains("UPDATE person", "<strong>2</strong>");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.FAILED)).contains("SELECT broken FROM nowhere");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.MOST_USED)).contains("Dashboard source");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.BY_USER)).contains("writer-1", "reader-1");
+      assertThat(html.get(SqlWorkbenchHomeWidgetsMetaDataProducer.SUMMARY)).contains("Writes, 30 Days", "2 rows affected");
+
+      login("reader-1");
+      TableData recent = (TableData) new RenderWidgetAction().execute(new RenderWidgetInput()
+         .withWidgetMetaData((QWidgetMetaData) qInstance.getWidget(SqlWorkbenchHomeWidgetsMetaDataProducer.RECENT_RUNS))).getWidgetData();
+      assertThat(recent.getRows().toString()).contains("SELECT broken").doesNotContain("UPDATE person");
    }
 
 

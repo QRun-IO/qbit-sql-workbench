@@ -4,7 +4,15 @@ All notable changes to this project are documented here. The format follows Keep
 
 ## [1.0.0-RC.3] - Unreleased
 
+### Added
+- **App home dashboard.** The `sqlWorkbench` app's home is now an information dashboard of real data, read in the viewer's session (permissions and record locks apply): summary tiles and links, runs per day, recent notebooks, recent runs, slowest and failed queries, most-used notebooks, shared notebooks, committed writes, and (workbench admins only) activity by user. Each widget has an honest empty state.
+- **Runner.** The notebook editor (`SQL_WORKBENCH` widget) moves to its own nav entry: the `sqlWorkbenchRunner` child app, labeled Runner. Open a notebook with `/app/sqlWorkbenchRunner?notebook=<id>`.
+- On a notebook's record view: an Open in Runner widget, and a Runs child list (its executions the viewer may see) through the new join `sql_workbench_notebook_join_sql_workbench_execution`.
+- `SqlWorkbenchIntegrations`: opt-in ESB (`esbTableNames`) and Quick Search (`quickSearchTables`) hooks for the main tables, with no dependency on either module.
+
 ### Changed
+- **The nav lists only the main tables**: Notebooks and the execution audit, after the Runner. Cells, versions, pinned results and shares are child lists on a notebook (still standard tables, reachable by URL and API). The app's widget list is now the dashboard, not the `SQL_WORKBENCH` widget; links to `/app/sqlWorkbench` that expected the editor should point at `/app/sqlWorkbenchRunner`.
+- The notebook record's header shows the description.
 - **Names follow the owner rule: lowercase snake_case, prefixed with the qbit's name (metadata only, no DDL).** Tables `sql_workbench_notebook`, `sql_workbench_cell`, `sql_workbench_notebook_version`, `sql_workbench_result_snapshot`, `sql_workbench_notebook_share`, `sql_workbench_execution` (they now equal their backend table names); possible-value source `sql_workbench_share_audience_type`; permissions `sql_workbench.*`, `sql_workbench_admin.hasAccess` and `<table>.read` etc.; security key types `sql_workbench_user` (all-access `sql_workbench_all_access`) and `sql_workbench_audience`; joins `sql_workbench_notebook_join_sql_workbench_*`.
 - `tableNamePrefix` (and the QBit namespace) is normalized to lowercase snake_case and joined with one `_`.
 
