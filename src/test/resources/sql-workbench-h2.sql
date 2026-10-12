@@ -1,4 +1,5 @@
 -- H2 (MODE=MySQL) version of docs/ddl/postgres.sql, for unit tests.
+DROP TABLE IF EXISTS sql_workbench_notebook_share;
 DROP TABLE IF EXISTS sql_workbench_result_snapshot;
 DROP TABLE IF EXISTS sql_workbench_notebook_version;
 DROP TABLE IF EXISTS sql_workbench_cell;
@@ -68,6 +69,21 @@ CREATE TABLE IF NOT EXISTS sql_workbench_result_snapshot (
    create_date TIMESTAMP,
    CONSTRAINT pk_sql_workbench_result_snapshot PRIMARY KEY (id),
    CONSTRAINT fk_sql_workbench_result_snapshot_notebook FOREIGN KEY (notebook_id) REFERENCES sql_workbench_notebook (id)
+);
+
+CREATE TABLE IF NOT EXISTS sql_workbench_notebook_share (
+   id INTEGER AUTO_INCREMENT NOT NULL,
+   notebook_id INTEGER NOT NULL,
+   audience_type VARCHAR(16) NOT NULL,
+   audience_id VARCHAR(255),
+   audience_key VARCHAR(300) NOT NULL,
+   created_by_user_id VARCHAR(255),
+   created_by_name VARCHAR(255),
+   create_date TIMESTAMP,
+   modify_date TIMESTAMP,
+   CONSTRAINT pk_sql_workbench_notebook_share PRIMARY KEY (id),
+   CONSTRAINT uq_sql_workbench_notebook_share UNIQUE (notebook_id, audience_key),
+   CONSTRAINT fk_sql_workbench_notebook_share_notebook FOREIGN KEY (notebook_id) REFERENCES sql_workbench_notebook (id)
 );
 
 -- Audit: append-only. Not foreign-keyed to notebooks, so deleting a

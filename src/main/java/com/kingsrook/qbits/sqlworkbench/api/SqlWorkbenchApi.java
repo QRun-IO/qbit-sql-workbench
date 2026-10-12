@@ -40,7 +40,7 @@ import com.kingsrook.qqq.backend.core.utils.StringUtils;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitProducer;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
-import com.kingsrook.qbits.sqlworkbench.SystemUser;
+import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchSecurity;
 import com.kingsrook.qbits.sqlworkbench.engine.Caller;
 import com.kingsrook.qbits.sqlworkbench.engine.ColumnInfo;
 import com.kingsrook.qbits.sqlworkbench.engine.ExecutionRequest;
@@ -107,16 +107,12 @@ public class SqlWorkbenchApi
          throw (new QPermissionDeniedException("Permission denied."));
       }
 
-      String userId   = session.getUser() != null && StringUtils.hasContent(session.getUser().getIdReference()) ? session.getUser().getIdReference() : session.getIdReference();
-      String userName = session.getUser() != null && StringUtils.hasContent(session.getUser().getFullName()) ? session.getUser().getFullName() : userId;
-      if(!StringUtils.hasContent(userId))
+      if(!StringUtils.hasContent(SqlWorkbenchSecurity.userId(session)))
       {
          throw (new QAuthenticationException("The session has no user."));
       }
-
-      boolean canWrite = Boolean.TRUE.equals(config.getWriteModeEnabled()) && session.hasPermission(config.getWritePermissionName());
-      boolean canShare = session.hasPermission(config.getSharePermissionName());
-      return (new Caller(userId, userName, canWrite, canShare, clientIp));
+      SqlWorkbenchSecurity.ensureSessionKeys(config, session);
+      return (Caller.fromSession(config, session, clientIp));
    }
 
 
@@ -264,10 +260,10 @@ public class SqlWorkbenchApi
 
       List<Map<String, Object>> executions = new ArrayList<>();
       //////////////////////////////////////////////////////////////////////
-      // the audit table needs the admin permission; the filter above is //
-      // the boundary (own rows only), so read it as the system user     //
+      // read as the caller: the audit's record lock limits them to their //
+      // own rows (admins see all, so the filter keeps history personal)  //
       //////////////////////////////////////////////////////////////////////
-      for(QRecord record : SystemUser.call(() -> QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME), filter)))
+      for(QRecord record : QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME), filter))
       {
          SqlWorkbenchExecution execution = new SqlWorkbenchExecution(record);
          Map<String, Object>   view      = new LinkedHashMap<>();
@@ -307,10 +303,10 @@ public class SqlWorkbenchApi
    {
       String executionUuid = normalizeUuid(requireString(body, "executionUuid"));
       cached(caller, executionUuid);
-      List<QRecord> audit = SystemUser.call(() -> QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME),
+      List<QRecord> audit = QueryAction.execute(config.applyPrefix(SqlWorkbenchExecution.TABLE_NAME),
          new QQueryFilter(new QFilterCriteria("executionUuid", QCriteriaOperator.EQUALS, executionUuid))
             .withCriteria(new QFilterCriteria("userId", QCriteriaOperator.EQUALS, caller.userId()))
-            .withLimit(1)));
+            .withLimit(1));
       String sqlText = audit.isEmpty() ? null : audit.get(0).getValueString("sqlText");
 
       Map<String, Object> normalized = new LinkedHashMap<>(body);
