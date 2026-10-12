@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog; versions follow semantic versioning.
 
-## [1.0.0-RC.3] - Unreleased
+## [1.0.0-RC.4] - Unreleased
 
 ### Added
 - **App home dashboard.** The `sqlWorkbench` app's home is now an information dashboard of real data, read in the viewer's session (permissions and record locks apply): summary tiles and links, runs per day, recent notebooks, recent runs, slowest and failed queries, most-used notebooks, shared notebooks, committed writes, and (workbench admins only) activity by user. Each widget has an honest empty state.
@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows Keep
 
 ### Upgrade from RC.2
 - Follow [UPGRADE.md](UPGRADE.md): grant the renamed permissions and rename stored table names (audit, saved views and reports). No DDL.
+
+## [1.0.0-RC.3] - 2026-10-12
+
+**Do not use.** 1.0.0-RC.3 on Maven Central is an accidental republish of the RC.2 code by a tag build; do not use it. The next real candidate is 1.0.0-RC.4. (Cause: QRun-IO/qqq-orb#20; the `publish_release` workflow now runs on GA tags only.)
 
 ## [1.0.0-RC.2] - Unreleased
 
