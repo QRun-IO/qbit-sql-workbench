@@ -114,7 +114,7 @@ Everything is denied by default. Two standard QQQ layers apply:
 
 | Role | Grant | What it allows |
 |---|---|---|
-| User | `config.getUserPermissionNames()`: `sql_workbench.hasAccess`, plus read/insert/edit/delete on notebooks and cells, read on versions, shares and the audit, and read/edit/delete on pinned results | The app, widget and endpoints (read-only SQL, EXPLAIN, schema). Their own notebooks, read-only access to notebooks shared with them or in the library, and their own execution history. |
+| User | `config.getUserPermissionNames()`: `sql_workbench.hasAccess`, plus read/insert/edit/delete on notebooks and cells, read on versions, shares and the audit, and read/insert/edit/delete on pinned results | The app, widget and endpoints (read-only SQL, EXPLAIN, schema). Their own notebooks, read-only access to notebooks shared with them or in the library, and their own execution history. |
 | Writer | `config.getWritePermissionName()` (`sql_workbench.write`) | Write mode (preview and commit) and EXPLAIN ANALYZE. |
 | Sharer | `config.getSharePermissionNames()`: `sql_workbench.share`, plus insert/edit/delete on shares | Sharing their own notebooks with users, groups, or everyone (publishing to the library). |
 | Admin | `config.getAdminPermissionNames()`: the user permissions plus `sql_workbench_admin.hasAccess` | The all-access key: every user's notebooks, cells, versions, pinned results (real query data), shares, and the whole execution audit, and editing any notebook. |

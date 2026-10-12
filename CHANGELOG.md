@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog; versions follow semantic versioning.
 
-## [1.0.0-RC.3] - Unreleased
+## [1.0.0-RC.4] - Unreleased
 
 ### Added
 - **App home dashboard.** The `sqlWorkbench` app's home is now an information dashboard of real data, read in the viewer's session (permissions and record locks apply): summary tiles and links, runs per day, recent notebooks, recent runs, slowest and failed queries, most-used notebooks, shared notebooks, committed writes, and (workbench admins only) activity by user. Each widget has an honest empty state.
@@ -17,11 +17,18 @@ All notable changes to this project are documented here. The format follows Keep
 - **Names follow the owner rule: lowercase snake_case, prefixed with the qbit's name (metadata only, no DDL).** Tables `sql_workbench_notebook`, `sql_workbench_cell`, `sql_workbench_notebook_version`, `sql_workbench_result_snapshot`, `sql_workbench_notebook_share`, `sql_workbench_execution` (they now equal their backend table names); possible-value source `sql_workbench_share_audience_type`; permissions `sql_workbench.*`, `sql_workbench_admin.hasAccess` and `<table>.read` etc.; security key types `sql_workbench_user` (all-access `sql_workbench_all_access`) and `sql_workbench_audience`; joins `sql_workbench_notebook_join_sql_workbench_*`.
 - `tableNamePrefix` (and the QBit namespace) is normalized to lowercase snake_case and joined with one `_`.
 
+### Fixed
+- **Pinning a result works with QQQ core permission enforcement on.** `getUserPermissionNames()` now includes `sql_workbench_result_snapshot.insert`: pinning is a top-level insert, which core enforcement checks, so hosts no longer need to grant it by hand. Record locks still limit snapshots to the user's own notebooks.
+
 ### Deprecated
 - `LEGACY_TABLE_NAME` on each entity, `ShareAudienceType.LEGACY_NAME` and `SqlWorkbenchQBitConfig.LEGACY_*` hold the pre-RC.3 names, for migrating stored references only.
 
 ### Upgrade from RC.2
 - Follow [UPGRADE.md](UPGRADE.md): grant the renamed permissions and rename stored table names (audit, saved views and reports). No DDL.
+
+## [1.0.0-RC.3] - 2026-10-12
+
+**Do not use.** 1.0.0-RC.3 on Maven Central is an accidental republish of the RC.2 code by a tag build; do not use it. The next real candidate is 1.0.0-RC.4. (Cause: QRun-IO/qqq-orb#20; the `publish_release` workflow now runs on GA tags only.)
 
 ## [1.0.0-RC.2] - Unreleased
 
