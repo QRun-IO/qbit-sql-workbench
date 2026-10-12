@@ -44,6 +44,7 @@ How tests are split:
 - `SqlWorkbenchIntegrations`: opt-in ESB and Quick Search hooks for the main tables.
 - `customizers/`: table customizers holding the notebook invariants for every entry point; `SqlWorkbenchSecurity` puts the lock keys in sessions.
 - `processes/`: the record-action steps (Share, Duplicate, Restore Version).
+- `developer/`: `SqlWorkbenchDeveloperPanelProvider` (the "SQL Workbench" record developer panel, registered by `metadata/SqlWorkbenchDeveloperPanelsMetaDataProducer`) and `RecordSql` (read-only SELECTs in backend names, dialect quoting and literals).
 
 **Invariants (do not break):**
 - Never log SQL text, parameters, or results. Only the audit table holds them.
@@ -64,7 +65,7 @@ How tests are split:
 ## Dependencies
 
 - Java 21.
-- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.2` ahead of it, as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
+- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.4` ahead of it (RC.4 brings the record developer panel contract), as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
 - `qqq-backend-core`, `qqq-backend-module-rdbms`, and `qqq-middleware-javalin` (optional).
 - Tests: JUnit 5, AssertJ, Mockito, H2, `qqq-backend-module-sqlite`/`-postgres` (drivers), Testcontainers 1.21.4.
 

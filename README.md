@@ -142,6 +142,16 @@ A session without the access permission gets no keys, so it finds no workbench r
 
 `writeModeEnabled=false` turns write mode off for everyone.
 
+## Record developer panel
+
+With QQQ 4.1.0-RC.4 or later, the qbit registers a **SQL Workbench** panel for a record's developer view (`/app/{table}/{id}/dev` in the Next UI). It shows for tables on an RDBMS backend the workbench targets (honoring `allowedBackendNames` / `excludedBackendNames`), and only to users with `sql_workbench.hasAccess`. It contains:
+
+- A read-only `SELECT` for the record and one for the table (`LIMIT 100`), in the backend's own table and column names (aliased to the QQQ field names), with identifiers quoted and the primary key written as an escaped literal for the dialect.
+- The backend, dialect, database table, and whether read-only sessions use the backend's read-only replica.
+- Links that open each query in the workbench (`/app/sqlWorkbenchRunner?sql=...&backend=...`, the Runner, with the table name prefix applied). The Runner opens the SQL as a new cell and does not run it.
+
+The panel only builds text. What runs is what the user executes, under their workbench permissions; the write permission does not change the panel.
+
 ## Administering through the tables
 
 Everything the Runner does can be done and inspected through the tables. Notebooks and the execution audit are in the SQL Workbench app's nav; the others open from a notebook's record view (or by URL). The same customizers run either way.
