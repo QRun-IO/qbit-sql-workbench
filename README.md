@@ -167,6 +167,8 @@ A checklist for adding the workbench to a QQQ application. Each row points to th
 
 Nothing in the qbit is specific to one host application.
 
+See also the [QQQ adoption checklist](https://github.com/QRun-IO/qqq/blob/develop/docs/migration/adoption-checklist.adoc) for the full per-feature list (QQQ upgrade, Next dashboard, QBits, migrations, permissions).
+
 ## Build
 
 ```bash
