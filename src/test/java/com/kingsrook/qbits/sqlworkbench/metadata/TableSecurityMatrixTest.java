@@ -487,6 +487,90 @@ class TableSecurityMatrixTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
+    ** Mixed batches and re-targeting: only the allowed rows change, and the
+    ** qbit's own bookkeeping (versions, visibility, cascades) never touches
+    ** a notebook the caller may not change.
+    *******************************************************************************/
+   @Test
+   void testMixedBatchesRetargetingAndPlanting() throws Exception
+   {
+      Integer privateId = ids.get("Private");
+      Integer library   = ids.get("Library");
+      Integer othersOwn = ids.get("Other's own");
+
+      ///////////////////////////////////////////////////////////////
+      // one insert batch: a cell in my notebook and one in OTHER's //
+      ///////////////////////////////////////////////////////////////
+      login(OWNER);
+      List<QRecord> inserted = new InsertAction().execute(new InsertInput(SqlWorkbenchCell.TABLE_NAME).withRecords(List.of(
+         new QRecord().withValue("notebookId", privateId).withValue("content", "SELECT 'mine'"),
+         new QRecord().withValue("notebookId", othersOwn).withValue("content", "SELECT 'theirs'")))).getRecords();
+      assertThat(inserted.get(0).getErrors()).isNullOrEmpty();
+      assertThat(inserted.get(1).getErrors()).isNotEmpty();
+      assertThat(currentVersion(privateId)).isEqualTo(2);
+      assertThat(currentVersion(othersOwn)).isEqualTo(1);
+      assertThat(SystemUser.call(() -> QueryAction.execute(SqlWorkbenchCell.TABLE_NAME, new QQueryFilter(new QFilterCriteria("notebookId", QCriteriaOperator.EQUALS, othersOwn))))).hasSize(1);
+
+      /////////////////////////////////////////////////////////////////////
+      // one update batch: OTHER's own cell and a (readable) library cell //
+      /////////////////////////////////////////////////////////////////////
+      login(OTHER);
+      List<QRecord> updated = new UpdateAction().execute(new UpdateInput(SqlWorkbenchCell.TABLE_NAME).withRecords(List.of(
+         new QRecord().withValue("id", cellOf(othersOwn)).withValue("content", "SELECT 'edited'"),
+         new QRecord().withValue("id", cellOf(library)).withValue("content", "SELECT 'hijacked'")))).getRecords();
+      assertThat(updated.get(0).getErrors()).isNullOrEmpty();
+      assertThat(updated.get(1).getErrors()).isNotEmpty();
+      assertThat(currentVersion(othersOwn)).isEqualTo(2);
+      assertThat(currentVersion(library)).isEqualTo(1);
+
+      //////////////////////////////////////////////////////////////////////
+      // re-targeting someone else's rows into my notebook is refused by  //
+      // the stored-row lock (the new value alone would pass)             //
+      //////////////////////////////////////////////////////////////////////
+      assertThatThrownBy(() -> v1Update(SqlWorkbenchCell.TABLE_NAME, cellOf(library), Map.of("notebookId", othersOwn))).isInstanceOf(QException.class);
+      login(OTHER_SHARER);
+      Integer sharersOwn = notebook(OTHER_SHARER, "Sharer's own");
+      login(OTHER_SHARER);
+      assertThatThrownBy(() -> v1Update(SqlWorkbenchNotebookShare.TABLE_NAME, shareOf(library), Map.of("notebookId", sharersOwn))).isInstanceOf(QException.class);
+      assertThat(SystemUser.call(() -> new GetAction().executeForRecord(new GetInput(SqlWorkbenchNotebookShare.TABLE_NAME).withPrimaryKey(shareOf(library)))).getValueInteger("notebookId")).isEqualTo(library);
+
+      ////////////////////////////////////////////////////////////////////////
+      // planting: an owner cannot hand a notebook to someone else          //
+      ////////////////////////////////////////////////////////////////////////
+      login(OWNER);
+      assertThatThrownBy(() -> v1Update(SqlWorkbenchNotebook.TABLE_NAME, privateId, Map.of("ownerUserId", OTHER))).isInstanceOf(QException.class);
+      assertThat(SystemUser.call(() -> new GetAction().executeForRecord(new GetInput(SqlWorkbenchNotebook.TABLE_NAME).withPrimaryKey(privateId))).getValueString("ownerUserId")).isEqualTo(OWNER);
+
+      ///////////////////////////////////////////////////////////////////////
+      // a reader the notebook is shared with sees its pinned result, but //
+      // can neither relabel nor delete it                                //
+      ///////////////////////////////////////////////////////////////////////
+      insertShare(privateId, "USER", SHARED_USER);
+      login(SHARED_USER);
+      Integer snapshotId = v1Query(SqlWorkbenchResultSnapshot.TABLE_NAME).stream().filter(r -> privateId.equals(r.getValueInteger("notebookId"))).findFirst().orElseThrow().getValueInteger("id");
+      assertThatThrownBy(() -> v1Update(SqlWorkbenchResultSnapshot.TABLE_NAME, snapshotId, Map.of("label", "mine now"))).isInstanceOf(QException.class);
+      assertThat(v1Delete(SqlWorkbenchResultSnapshot.TABLE_NAME, snapshotId)).isZero();
+
+      ///////////////////////////////////////////////////////////////////////
+      // denied notebook deletes never cascade: children all still there  //
+      ///////////////////////////////////////////////////////////////////////
+      login(OTHER);
+      assertThat(v1Delete(SqlWorkbenchNotebook.TABLE_NAME, library)).isZero();
+      login(SHARED_USER);
+      assertThat(v1Delete(SqlWorkbenchNotebook.TABLE_NAME, privateId)).isZero();
+      for(Integer id : List.of(library, privateId))
+      {
+         for(String child : List.of(SqlWorkbenchCell.TABLE_NAME, SqlWorkbenchNotebookVersion.TABLE_NAME, SqlWorkbenchNotebookShare.TABLE_NAME))
+         {
+            assertThat(SystemUser.call(() -> QueryAction.execute(child, new QQueryFilter(new QFilterCriteria("notebookId", QCriteriaOperator.EQUALS, id))))).as(child + " of " + id).isNotEmpty();
+         }
+      }
+      assertThat(SystemUser.call(() -> QueryAction.execute(SqlWorkbenchResultSnapshot.TABLE_NAME, new QQueryFilter()))).hasSize(1);
+   }
+
+
+
+   /*******************************************************************************
     ** Editing a share re-targets it (new audience key, visibility in step);
     ** audiences cannot edit or remove the share that names them.
     *******************************************************************************/

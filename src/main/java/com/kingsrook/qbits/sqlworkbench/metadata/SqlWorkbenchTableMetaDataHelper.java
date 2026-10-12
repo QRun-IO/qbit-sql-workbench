@@ -203,7 +203,7 @@ public class SqlWorkbenchTableMetaDataHelper
             .withOperator(MultiRecordSecurityLock.BooleanOperator.OR)
             .withLock(ownerLock(config, config.applyPrefix(SqlWorkbenchNotebook.TABLE_NAME) + ".ownerUserId", config.applyPrefix(JOIN_NOTEBOOK_SHARE)))
             .withLock(shareLock(config, "audienceKey")))
-         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.FIELD))
+         .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.RECORD))
          .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1, List.of("id", "notebookId", "audienceType", "audienceId")))
          .withSection(new QFieldSection("system", new QIcon("calendar_month"), Tier.T3, List.of("audienceKey", "createdByName", "createdByUserId", "createDate", "modifyDate")));
       table.getField("audienceType").setPossibleValueSourceName(config.applyPrefix(ShareAudienceType.NAME));

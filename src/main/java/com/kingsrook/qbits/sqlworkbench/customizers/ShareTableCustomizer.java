@@ -44,6 +44,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.session.QSession;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
+import static com.kingsrook.qqq.backend.core.logging.LogUtils.logPair;
 
 
 /*******************************************************************************
@@ -274,10 +275,15 @@ public class ShareTableCustomizer extends WorkbenchTableCustomizer
                .withFilter(new QQueryFilter(new QFilterCriteria("notebookId", QCriteriaOperator.EQUALS, notebookId))
                   .withCriteria(new QFilterCriteria("audienceKey", QCriteriaOperator.EQUALS, SqlWorkbenchSecurity.AUDIENCE_ALL)))).getCount();
             String visibility = allShares != null && allShares > 0 ? NotebookService.VISIBILITY_SHARED : NotebookService.VISIBILITY_PERSONAL;
-            new UpdateAction().execute(new UpdateInput(config.applyPrefix(SqlWorkbenchNotebook.TABLE_NAME))
+            QRecord updated = new UpdateAction().execute(new UpdateInput(config.applyPrefix(SqlWorkbenchNotebook.TABLE_NAME))
                .withFlag(SqlWorkbenchActionFlag.INTERNAL)
                .withTransaction(transaction)
-               .withRecord(new QRecord().withValue("id", notebookId).withValue("visibility", visibility).withValue("modifyDate", now)));
+               .withRecord(new QRecord().withValue("id", notebookId).withValue("visibility", visibility).withValue("modifyDate", now))).getRecords().get(0);
+            if(!ok(updated))
+            {
+               LOG.warn("Could not sync a notebook's visibility with its shares", logPair("notebookId", notebookId), logPair("error", updated.getErrors().get(0).getMessage()));
+               throw (new QException("Could not update the notebook's visibility: " + updated.getErrors().get(0).getMessage()));
+            }
          }
       });
    }

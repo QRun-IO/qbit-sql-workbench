@@ -120,11 +120,11 @@ Everything the notebook UI does can be done and inspected through the tables und
 - **Notebooks**: create, rename, describe, delete (which removes its cells, versions, pinned results, and shares). The record view lists the notebook's cells, shares, pinned results, and versions. Record actions: Share Notebook and Duplicate Notebook.
 - **Cells**: add (appended at the end, with a generated key), edit, reorder (`sortOrder`), delete. Each change saves a new notebook version, exactly like a save in the notebook UI.
 - **Versions**: read-only history. Restore Version saves the chosen version as a new one.
-- **Shares**: who can read a notebook. `USER` and `GROUP` shares name their audience (matched without regard to case); `ALL` publishes the notebook to the shared library. The notebook's `visibility` follows its shares.
+- **Shares**: who can read a notebook. `USER` and `GROUP` shares name their audience, matched without regard to case (so user ids and group names must be case-insensitive in the host); `ALL` publishes the notebook to the shared library. The notebook's `visibility` follows its shares.
 - **Pinned results**: relabel or delete. Only pinning a result in the notebook UI creates them.
 - **Execution audit**: read, filter, and export. Nobody can edit or delete it through QQQ.
 
-Shares get field-level QQQ audits. Notebooks, cells, and pinned results get record-level audits, so their SQL text and result data are not copied into the audit tables.
+Notebooks, cells, pinned results, and shares get record-level QQQ audits, so SQL text, result data, and share audiences are not copied into the host's audit tables (whose readers the workbench locks do not reach).
 
 ## Safety model
 

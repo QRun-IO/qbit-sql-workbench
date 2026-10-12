@@ -37,12 +37,14 @@ import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteOutput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
 import com.kingsrook.qqq.backend.core.utils.JsonUtils;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
 
@@ -162,7 +164,15 @@ public class NotebookTableCustomizer extends WorkbenchTableCustomizer
             badInput(record, "Visibility follows the notebook's shares: share it with Everyone to publish it to the shared library.");
             continue;
          }
-         if(!changes(record, old, "ownerUserId"))
+         if(changes(record, old, "ownerUserId"))
+         {
+            ////////////////////////////////////////////////////////////////
+            // an admin transfer (the lock allows nobody else): the name  //
+            // follows the new owner id, never a client-supplied value    //
+            ////////////////////////////////////////////////////////////////
+            record.setValue("ownerName", record.getValueString("ownerUserId"));
+         }
+         else
          {
             record.removeValue("ownerName");
          }
@@ -203,7 +213,10 @@ public class NotebookTableCustomizer extends WorkbenchTableCustomizer
 
    /*******************************************************************************
     ** Delete the children of the notebooks QQQ authorized for deletion (the
-    ** foreign keys need them gone first).
+    ** foreign keys need them gone first). Inside the delete's transaction
+    ** when it has one (the notebook UI always does); a table-UI / API delete
+    ** has none, so there the children go first, in autocommit. A failed child
+    ** delete aborts the notebook delete.
     *******************************************************************************/
    @Override
    public List<QRecord> preDelete(DeleteInput deleteInput, List<QRecord> records, boolean isPreview) throws QException
@@ -231,10 +244,14 @@ public class NotebookTableCustomizer extends WorkbenchTableCustomizer
       {
          for(String child : List.of(SqlWorkbenchCell.TABLE_NAME, SqlWorkbenchNotebookVersion.TABLE_NAME, SqlWorkbenchResultSnapshot.TABLE_NAME, SqlWorkbenchNotebookShare.TABLE_NAME))
          {
-            new DeleteAction().execute(new DeleteInput(config.applyPrefix(child))
+            DeleteOutput output = new DeleteAction().execute(new DeleteInput(config.applyPrefix(child))
                .withFlag(SqlWorkbenchActionFlag.INTERNAL)
                .withTransaction(deleteInput.getTransaction())
                .withQueryFilter(new QQueryFilter(new QFilterCriteria("notebookId", QCriteriaOperator.IN, ids))));
+            if(CollectionUtils.nullSafeHasContents(output.getRecordsWithErrors()))
+            {
+               throw (new QException("Could not delete the notebook's " + child + " rows: " + output.getRecordsWithErrors().get(0).getErrors().get(0).getMessage()));
+            }
          }
       });
       return (records);

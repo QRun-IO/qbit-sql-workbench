@@ -47,6 +47,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateOutput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.session.QSession;
 import com.kingsrook.qqq.backend.core.utils.JsonUtils;
@@ -96,12 +97,26 @@ public final class NotebookVersioning
 
          SqlWorkbenchNotebook notebook = new SqlWorkbenchNotebook(found.get(0));
          Instant              now      = clock.instant();
-         int                  version  = (notebook.getCurrentVersion() == null ? 0 : notebook.getCurrentVersion()) + 1;
+         ///////////////////////////////////////////////////////////////////////
+         // next number: past both currentVersion and the newest stored      //
+         // version, so a stale currentVersion can never wedge later saves   //
+         // on the (notebookId, versionNumber) unique key                    //
+         ///////////////////////////////////////////////////////////////////////
+         int latest = notebook.getCurrentVersion() == null ? 0 : notebook.getCurrentVersion();
+         List<QRecord> newest = new QueryAction().execute(new QueryInput(config.applyPrefix(SqlWorkbenchNotebookVersion.TABLE_NAME))
+            .withFilter(new QQueryFilter(new QFilterCriteria("notebookId", QCriteriaOperator.EQUALS, notebookId)).withOrderBy(new QFilterOrderBy("versionNumber", false)).withLimit(1))
+            .withTransaction(transaction)).getRecords();
+         if(!newest.isEmpty() && newest.get(0).getValueInteger("versionNumber") != null)
+         {
+            latest = Math.max(latest, newest.get(0).getValueInteger("versionNumber"));
+         }
+         int version = latest + 1;
 
-         new UpdateAction().execute(new UpdateInput(config.applyPrefix(SqlWorkbenchNotebook.TABLE_NAME))
+         UpdateOutput updated = new UpdateAction().execute(new UpdateInput(config.applyPrefix(SqlWorkbenchNotebook.TABLE_NAME))
             .withFlag(SqlWorkbenchActionFlag.INTERNAL)
             .withTransaction(transaction)
             .withRecord(new QRecord().withValue("id", notebookId).withValue("currentVersion", version).withValue("modifyDate", now)));
+         NotebookService.throwIfErrors(updated.getRecords().get(0));
 
          SqlWorkbenchNotebookVersion versionRow = new SqlWorkbenchNotebookVersion()
             .withNotebookId(notebookId)

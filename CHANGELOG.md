@@ -13,7 +13,7 @@ The workbench's data becomes standard QQQ tables, secured by QQQ's own mechanism
 - All six tables are children of the `sqlWorkbench` app, with record-view sections, child-list widgets (cells, shares, pinned results, versions) and SQL / JSON code-editor adornments.
 - Record actions (processes on tables, not in the nav): Share Notebook, Duplicate Notebook, Restore Version.
 - Table customizers that keep the notebook invariants for every entry point: ownership from the session, cell validation and ordering, one version per change, share keys and visibility, append-only versions and audit (also for admins), pinned results only from pinning, cascading notebook deletes.
-- Record-level QQQ audits for notebooks, cells and pinned results; field-level for shares.
+- Record-level QQQ audits for notebooks, cells, pinned results and shares.
 
 ### Changed
 - `NotebookService` and the history endpoint run as the caller's session through the standard table actions (no system-user bypass); the explicit owner / share checks stay as defense in depth.

@@ -32,6 +32,7 @@ import com.kingsrook.qqq.backend.core.actions.QBackendTransaction;
 import com.kingsrook.qqq.backend.core.actions.customizers.AbstractPreInsertCustomizer;
 import com.kingsrook.qqq.backend.core.actions.customizers.TableCustomizerInterface;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
@@ -39,6 +40,7 @@ import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.statusmessages.BadInputStatusMessage;
 import com.kingsrook.qqq.backend.core.model.statusmessages.PermissionDeniedMessage;
 import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
+import static com.kingsrook.qqq.backend.core.logging.LogUtils.logPair;
 
 
 /*******************************************************************************
@@ -52,6 +54,8 @@ import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
  *******************************************************************************/
 public abstract class WorkbenchTableCustomizer implements TableCustomizerInterface
 {
+   protected static final QLogger LOG = QLogger.getLogger(WorkbenchTableCustomizer.class);
+
 
    /*******************************************************************************
     ** Stamp defaults before QQQ validates (required fields, record locks).
@@ -249,7 +253,19 @@ public abstract class WorkbenchTableCustomizer implements TableCustomizerInterfa
    {
       for(Integer notebookId : notebookIds)
       {
-         NotebookVersioning.appendVersion(config(), clock(), notebookId, comment, transaction);
+         try
+         {
+            NotebookVersioning.appendVersion(config(), clock(), notebookId, comment, transaction);
+         }
+         catch(QException e)
+         {
+            ////////////////////////////////////////////////////////////////////
+            // QQQ turns post-customizer exceptions into record warnings, so //
+            // log here too: a change without its version must be visible    //
+            ////////////////////////////////////////////////////////////////////
+            LOG.warn("Could not append a notebook version", e, logPair("notebookId", notebookId), logPair("comment", comment));
+            throw (e);
+         }
       }
    }
 
