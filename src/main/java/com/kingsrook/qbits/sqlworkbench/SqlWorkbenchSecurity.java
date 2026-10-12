@@ -39,10 +39,10 @@ import com.kingsrook.qqq.backend.core.utils.StringUtils;
  ** The workbench's record-security keys.
  **
  ** Two security key types guard the qbit's tables:
- ** - sqlWorkbenchUser: the session's user id. Owner locks (a notebook's
+ ** - sql_workbench_user: the session's user id. Owner locks (a notebook's
  **   ownerUserId, an execution's userId) match it. Its all-access key,
- **   sqlWorkbenchAllAccess, is set for workbench admins.
- ** - sqlWorkbenchAudience: the session's audience keys: "user:<id>",
+ **   sql_workbench_all_access, is set for workbench admins.
+ ** - sql_workbench_audience: the session's audience keys: "user:<id>",
  **   "group:<name>" per group, and "all". Share locks (a share row's
  **   audienceKey) match it, for reads only.
  **

@@ -25,7 +25,7 @@ import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 
 
 /*******************************************************************************
- ** Produces the sqlWorkbenchResultSnapshot table.
+ ** Produces the sql_workbench_result_snapshot table.
  *******************************************************************************/
 public class SqlWorkbenchResultSnapshotTableMetaDataProducer extends QBitComponentMetaDataProducer<QTableMetaData, SqlWorkbenchQBitConfig>
 {

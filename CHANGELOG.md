@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog; versions follow semantic versioning.
 
+## [1.0.0-RC.3] - Unreleased
+
+### Changed
+- **Names follow the owner rule: lowercase snake_case, prefixed with the qbit's name (metadata only, no DDL).** Tables `sql_workbench_notebook`, `sql_workbench_cell`, `sql_workbench_notebook_version`, `sql_workbench_result_snapshot`, `sql_workbench_notebook_share`, `sql_workbench_execution` (they now equal their backend table names); possible-value source `sql_workbench_share_audience_type`; permissions `sql_workbench.*`, `sql_workbench_admin.hasAccess` and `<table>.read` etc.; security key types `sql_workbench_user` (all-access `sql_workbench_all_access`) and `sql_workbench_audience`; joins `sql_workbench_notebook_join_sql_workbench_*`.
+- `tableNamePrefix` (and the QBit namespace) is normalized to lowercase snake_case and joined with one `_`.
+
+### Deprecated
+- `LEGACY_TABLE_NAME` on each entity, `ShareAudienceType.LEGACY_NAME` and `SqlWorkbenchQBitConfig.LEGACY_*` hold the pre-RC.3 names, for migrating stored references only.
+
+### Upgrade from RC.2
+- Follow [UPGRADE.md](UPGRADE.md): grant the renamed permissions and rename stored table names (audit, saved views and reports). No DDL.
+
 ## [1.0.0-RC.2] - Unreleased
 
 The workbench's data becomes standard QQQ tables, secured by QQQ's own mechanisms instead of being hidden ([#3](https://github.com/QRun-IO/qbit-sql-workbench/issues/3)). Requires QQQ `4.1.0-RC.4` or later ([qqq#1073](https://github.com/QRun-IO/qqq/issues/1073)).

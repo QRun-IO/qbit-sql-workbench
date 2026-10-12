@@ -6,7 +6,7 @@ You write SQL and markdown in notebook cells, run them against any RDBMS backend
 
 - **Read-only by default.** A default session runs one statement inside a database `READ ONLY` transaction, and a statement classifier refuses anything that isn't a read.
 - **Gated write mode.** Writes need a separate permission and two steps. First a dry run executes in a transaction that is rolled back, so you see the affected-row counts. You then confirm with a single-use token bound to that exact SQL. A row guard, a hard cap, a drift check, and statement timeouts apply.
-- **Everything is audited.** The `sqlWorkbenchExecution` table records who ran what, when, on which backend, in which mode, how long it took, how many rows it returned or affected, and any error. SQL text and results never go to the logs.
+- **Everything is audited.** The `sql_workbench_execution` table records who ran what, when, on which backend, in which mode, how long it took, how many rows it returned or affected, and any error. SQL text and results never go to the logs.
 - **Notebooks.** Notebooks are personal by default and can be shared, read-only, with users, groups, or everyone (the shared library). They have named `:parameters` (always bound, never spliced), version history, and pinned result snapshots.
 - **Standard QQQ tables.** Notebooks, cells, versions, pinned results, shares, and the execution audit are ordinary QQQ tables in the app, with the usual query, record, edit, export, audit, and developer-mode screens. Record security locks decide who sees and changes which rows, for every entry point.
 
@@ -43,8 +43,8 @@ new SqlWorkbenchQBitProducer().withQBitConfig(config).produce(qInstance);
 
 The producer adds the following to the instance:
 
-- **Tables:** `sqlWorkbenchNotebook`, `sqlWorkbenchCell`, `sqlWorkbenchNotebookVersion`, `sqlWorkbenchResultSnapshot`, `sqlWorkbenchNotebookShare`, `sqlWorkbenchExecution`, each with record security locks, per-table permissions, and table customizers ([Permissions](#permissions)).
-- **Security key types** `sqlWorkbenchUser` (all-access key `sqlWorkbenchAllAccess`) and `sqlWorkbenchAudience`.
+- **Tables:** `sql_workbench_notebook`, `sql_workbench_cell`, `sql_workbench_notebook_version`, `sql_workbench_result_snapshot`, `sql_workbench_notebook_share`, `sql_workbench_execution`, each with record security locks, per-table permissions, and table customizers ([Permissions](#permissions)).
+- **Security key types** `sql_workbench_user` (all-access key `sql_workbench_all_access`) and `sql_workbench_audience`.
 - **Joins** from a notebook to its cells, versions, pinned results, and shares, with child-list widgets on the notebook's record view.
 - **Possible value sources** over the notebook table and the share audience types.
 - **Record actions** (processes on a table, never in the nav): Share Notebook, Duplicate Notebook, Restore Version.
@@ -85,10 +85,10 @@ Everything is denied by default. Two standard QQQ layers apply:
 
 | Role | Grant | What it allows |
 |---|---|---|
-| User | `config.getUserPermissionNames()`: `sqlWorkbench.hasAccess`, plus read/insert/edit/delete on notebooks and cells, read on versions, shares and the audit, and read/edit/delete on pinned results | The app, widget and endpoints (read-only SQL, EXPLAIN, schema). Their own notebooks, read-only access to notebooks shared with them or in the library, and their own execution history. |
-| Writer | `config.getWritePermissionName()` (`sqlWorkbench.write`) | Write mode (preview and commit) and EXPLAIN ANALYZE. |
-| Sharer | `config.getSharePermissionNames()`: `sqlWorkbench.share`, plus insert/edit/delete on shares | Sharing their own notebooks with users, groups, or everyone (publishing to the library). |
-| Admin | `config.getAdminPermissionNames()`: the user permissions plus `sqlWorkbenchAdmin.hasAccess` | The all-access key: every user's notebooks, cells, versions, pinned results (real query data), shares, and the whole execution audit, and editing any notebook. |
+| User | `config.getUserPermissionNames()`: `sql_workbench.hasAccess`, plus read/insert/edit/delete on notebooks and cells, read on versions, shares and the audit, and read/edit/delete on pinned results | The app, widget and endpoints (read-only SQL, EXPLAIN, schema). Their own notebooks, read-only access to notebooks shared with them or in the library, and their own execution history. |
+| Writer | `config.getWritePermissionName()` (`sql_workbench.write`) | Write mode (preview and commit) and EXPLAIN ANALYZE. |
+| Sharer | `config.getSharePermissionNames()`: `sql_workbench.share`, plus insert/edit/delete on shares | Sharing their own notebooks with users, groups, or everyone (publishing to the library). |
+| Admin | `config.getAdminPermissionNames()`: the user permissions plus `sql_workbench_admin.hasAccess` | The all-access key: every user's notebooks, cells, versions, pinned results (real query data), shares, and the whole execution audit, and editing any notebook. |
 
 The names are configurable (`accessPermissionBaseName`, `writePermissionName`, `sharePermissionName`, `adminPermissionBaseName`). Table permissions follow the table names, including any `tableNamePrefix`. QQQ 4.1 does not list `write` and `share` as available permissions, so grant them where you grant roles, for example in an authentication customizer.
 
@@ -96,9 +96,9 @@ The names are configurable (`accessPermissionBaseName`, `writePermissionName`, `
 
 | Key | Values | Used by |
 |---|---|---|
-| `sqlWorkbenchUser` | the user's id (`QUser.idReference`) | owner locks: a notebook's `ownerUserId` (its children reach it through the notebook) and an execution's `userId` |
-| `sqlWorkbenchAudience` | `user:<id>`, `group:<name>` for each group passed, and `all` | share locks (read only): a share row's `audienceKey` |
-| `sqlWorkbenchAllAccess` | `true` for holders of the admin permission | every row |
+| `sql_workbench_user` | the user's id (`QUser.idReference`) | owner locks: a notebook's `ownerUserId` (its children reach it through the notebook) and an execution's `userId` |
+| `sql_workbench_audience` | `user:<id>`, `group:<name>` for each group passed, and `all` | share locks (read only): a share row's `audienceKey` |
+| `sql_workbench_all_access` | `true` for holders of the admin permission | every row |
 
 A session without the access permission gets no keys, so it finds no workbench rows at all, even through code paths that skip table permissions. If the host never calls `applyToSession`, the workbench endpoints add the user and `all` keys themselves, but group shares need the host to pass the groups.
 
@@ -204,7 +204,7 @@ A checklist for adding the workbench to a QQQ application. Each row points to th
 | Navigation | The app lists the widget and the six tables. Its processes are record actions on the tables; keep them out of the nav. If your app adds explicit table menus or nav-coverage tests, include the six tables. |
 | Turning writes off | `withWriteModeEnabled(false)` disables write mode for everyone. |
 | Known limitations | Raw SQL bypasses QQQ security, audits, listeners and automations ([Safety model](#safety-model)). H2 and generic backends have no enforced read-only transaction. Only PostgreSQL DDL ships. Shares are read-only (no shared editing). |
-| Upgrading | From RC.1: run the share-table DDL and backfill, grant the new permission lists (the tables no longer rely on `sqlWorkbenchAdmin.hasAccess` alone), call `applyToSession`, and use QQQ `4.1.0-RC.4` or later. |
+| Upgrading | From RC.2: the QQQ names became snake_case (`sql_workbench_*`; no DDL). See [UPGRADE.md](UPGRADE.md) for permissions and stored table names. From RC.1: also run the share-table DDL and backfill, grant the new permission lists (the tables no longer rely on the admin `hasAccess` permission alone), call `applyToSession`, and use QQQ `4.1.0-RC.4` or later. |
 
 Nothing in the qbit is specific to one host application.
 

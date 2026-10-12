@@ -25,7 +25,7 @@ import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig;
 
 
 /*******************************************************************************
- ** Produces the sqlWorkbenchExecution (audit) table.
+ ** Produces the sql_workbench_execution (audit) table.
  *******************************************************************************/
 public class SqlWorkbenchExecutionTableMetaDataProducer extends QBitComponentMetaDataProducer<QTableMetaData, SqlWorkbenchQBitConfig>
 {
