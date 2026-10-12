@@ -244,7 +244,7 @@ A checklist for adding the workbench to a QQQ application. Each row points to th
 | ESB and search | Optional: wire `SqlWorkbenchIntegrations.esbTableNames` and `quickSearchTables` into your ESB and Quick Search config ([ESB and Quick Search](#esb-and-quick-search)). |
 | Turning writes off | `withWriteModeEnabled(false)` disables write mode for everyone. |
 | Known limitations | Raw SQL bypasses QQQ security, audits, listeners and automations ([Safety model](#safety-model)). H2 and generic backends have no enforced read-only transaction. Only PostgreSQL DDL ships. Shares are read-only (no shared editing). |
-| Upgrading | From RC.2: the QQQ names became snake_case (`sql_workbench_*`; no DDL). See [UPGRADE.md](UPGRADE.md) for permissions and stored table names. From RC.1: also run the share-table DDL and backfill, grant the new permission lists (the tables no longer rely on the admin `hasAccess` permission alone), call `applyToSession`, and use QQQ `4.1.0-RC.4` or later. |
+| Upgrading | From RC.2 (or RC.3, a copy of RC.2): the QQQ names became snake_case (`sql_workbench_*`; no DDL). See [UPGRADE.md](UPGRADE.md) for permissions and stored table names. From RC.1: also run the share-table DDL and backfill, grant the new permission lists (the tables no longer rely on the admin `hasAccess` permission alone), call `applyToSession`, and use QQQ `4.1.0-RC.4` or later. |
 
 Nothing in the qbit is specific to one host application.
 

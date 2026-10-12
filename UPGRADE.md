@@ -1,10 +1,12 @@
 # Upgrading
 
-## To 1.0.0-RC.3: snake_case names (metadata only)
+## To 1.0.0-RC.4: snake_case names (metadata only)
 
-The owner naming rule now applies to every QRun-IO qbit: table names are lowercase snake_case, prefixed with the qbit's name. In 1.0.0-RC.3 the SQL Workbench's QQQ names change to match. **The database does not change**: the physical tables were already `sql_workbench_*` (`docs/ddl/postgres.sql`), so no DDL runs. What changes is the names QQQ uses, and anything your app stored under the old names.
+The rename shipped in 1.0.0-RC.4. 1.0.0-RC.3 on Maven Central is an accidental republish of the RC.2 code (see CHANGELOG.md), so upgrading from RC.3 is the same as upgrading from RC.2.
 
-| Kind | Before (RC.1, RC.2) | From RC.3 |
+The owner naming rule now applies to every QRun-IO qbit: table names are lowercase snake_case, prefixed with the qbit's name. In 1.0.0-RC.4 the SQL Workbench's QQQ names change to match. **The database does not change**: the physical tables were already `sql_workbench_*` (`docs/ddl/postgres.sql`), so no DDL runs. What changes is the names QQQ uses, and anything your app stored under the old names.
+
+| Kind | Before (RC.1, RC.2, RC.3) | From RC.4 |
 |---|---|---|
 | Tables (and the notebook possible-value source) | `sqlWorkbenchNotebook`, `sqlWorkbenchCell`, `sqlWorkbenchNotebookVersion`, `sqlWorkbenchResultSnapshot`, `sqlWorkbenchNotebookShare`, `sqlWorkbenchExecution` | `sql_workbench_notebook`, `sql_workbench_cell`, `sql_workbench_notebook_version`, `sql_workbench_result_snapshot`, `sql_workbench_notebook_share`, `sql_workbench_execution` |
 | Enum possible-value source | `sqlWorkbenchShareAudienceType` | `sql_workbench_share_audience_type` |

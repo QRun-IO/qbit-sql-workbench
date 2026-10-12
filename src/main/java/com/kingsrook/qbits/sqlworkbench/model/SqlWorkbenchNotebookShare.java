@@ -36,10 +36,10 @@ public class SqlWorkbenchNotebookShare extends QRecordEntity
    public static final String TABLE_NAME = "sql_workbench_notebook_share";
 
    /*******************************************************************************
-    ** The table name before 1.0.0-RC.3 (owner rule: lowercase snake_case,
+    ** The table name before 1.0.0-RC.4 (owner rule: lowercase snake_case,
     ** prefixed with the qbit name). Kept for migrating stored references only.
     *******************************************************************************/
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_TABLE_NAME = "sqlWorkbenchNotebookShare";
 
    @QField(isEditable = false, isPrimaryKey = true)
