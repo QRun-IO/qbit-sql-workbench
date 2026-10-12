@@ -146,6 +146,27 @@ Base path: `/qqq/v1/sql-workbench`. The contract is in [docs/DESIGN.md §5](docs
 
 POST and PUT bodies must be `application/json`.
 
+## Adopting in another app
+
+A checklist for adding the workbench to a QQQ application. Each row points to the section above that has the details.
+
+| Item | What to do |
+|---|---|
+| Coordinates | `com.kingsrook.qbits:qbit-sql-workbench`. Current release candidate: `1.0.0-RC.1` (Maven Central, published from `release/1.0`). |
+| QQQ version | QQQ 4.1, `4.1.0-RC.2` or later. Java 21. |
+| Dependencies | `qqq-backend-module-rdbms` comes in transitively. Add `qqq-middleware-javalin` yourself for the REST routes; it is optional in this qbit's POM, and without it no routes are registered. |
+| Frontend | A Next UI (`qqq-frontend-next`) release that renders the `SQL_WORKBENCH` widget: `v1.0.0-RC.13` or later. Other frontends show the app and tables but not the notebook. |
+| Registration | `new SqlWorkbenchQBitProducer().withQBitConfig(config).produce(qInstance)` after your backends are in the instance. The producer registers its own QBit metadata; don't add it by hand. To nest the app (for example under Admin), re-parent `SqlWorkbenchQBitProducer.APP_NAME` after producing. |
+| Storage | Create the five tables on `backendName` before first use ([Storage](#storage)). PostgreSQL DDL ships in [docs/ddl/postgres.sql](docs/ddl/postgres.sql) and drops into a Liquibase formatted-SQL changeset; translate it for other databases. Match the snake_case names with a `tableMetaDataCustomizer`. |
+| Targets | Every RDBMS backend in the instance is a target unless you narrow it with `allowedBackendNames` or `excludedBackendNames`. |
+| Secrets | In production, configure `readOnlyCredentials` for each target backend with a SELECT-only database role, and optionally `writeCredentials`. Pass them as `${env.X}` references (the example uses `SQLWB_RO_USER` and `SQLWB_RO_PASSWORD`; the names are yours). The qbit reads no other environment variables. |
+| Permissions | `sqlWorkbench.hasAccess` (use), `sqlWorkbench.write` (write mode), `sqlWorkbench.share` (shared library), `sqlWorkbenchAdmin.hasAccess` (raw table access to every user's notebooks and the full audit; administrators and auditors only). QQQ 4.1 does not list `write` and `share` as available permissions, so grant them where you grant roles. See [Permissions](#permissions). |
+| Turning writes off | `withWriteModeEnabled(false)` disables write mode for everyone. |
+| Known limitations | Raw SQL bypasses QQQ security, audits, listeners and automations ([Safety model](#safety-model)). H2 and generic backends have no enforced read-only transaction. Only PostgreSQL DDL ships. The qbit produces no processes. |
+| Upgrading | 1.0 is the first release; there is nothing to migrate. |
+
+Nothing in the qbit is specific to one host application.
+
 ## Build
 
 ```bash
