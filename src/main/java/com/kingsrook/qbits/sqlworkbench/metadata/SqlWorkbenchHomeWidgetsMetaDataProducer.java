@@ -90,7 +90,7 @@ public class SqlWorkbenchHomeWidgetsMetaDataProducer extends QBitComponentMetaDa
       widgets.add(widget(config, SHARED, "Shared Notebooks", TABLE, SqlWorkbenchHome.KIND_SHARED, access));
       widgets.add(widget(config, WRITES, "Writes", TABLE, SqlWorkbenchHome.KIND_WRITES, access));
       widgets.add(widget(config, BY_USER, "Activity by User, 30 Days", TABLE, SqlWorkbenchHome.KIND_BY_USER, config.getAdminPermissionRules()));
-      widgets.add(widget(config, NOTEBOOK_RUNNER, "Runner", HTML, SqlWorkbenchHome.KIND_NOTEBOOK_RUNNER, access));
+      widgets.add(widget(config, NOTEBOOK_RUNNER, "Open in Runner", HTML, SqlWorkbenchHome.KIND_NOTEBOOK_RUNNER, access).withIsCard(false).withShowReloadButton(false));
 
       MetaDataProducerMultiOutput output = new MetaDataProducerMultiOutput();
       widgets.forEach(output::add);

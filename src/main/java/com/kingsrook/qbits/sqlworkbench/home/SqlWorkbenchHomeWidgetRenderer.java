@@ -20,7 +20,6 @@ import java.io.Serializable;
 import java.util.Map;
 import com.kingsrook.qbits.sqlworkbench.SqlWorkbenchRuntime;
 import com.kingsrook.qqq.backend.core.actions.dashboard.widgets.AbstractWidgetRenderer;
-import com.kingsrook.qqq.backend.core.actions.permissions.PermissionsHelper;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetInput;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetOutput;
@@ -31,7 +30,9 @@ import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
  ** Renders the SQL Workbench home widgets (and the notebook's "Open in
  ** Runner" widget). Which one is in the widget's "kind" default value; the
  ** data is read in the viewer's session, so permissions and record locks
- ** apply (see SqlWorkbenchHome).
+ ** apply (see SqlWorkbenchHome). The widgets' own permission rules (the
+ ** middleware checks them, and the instance metadata hides denied ones)
+ ** decide who gets each widget at all.
  *******************************************************************************/
 public class SqlWorkbenchHomeWidgetRenderer extends AbstractWidgetRenderer
 {
@@ -49,11 +50,6 @@ public class SqlWorkbenchHomeWidgetRenderer extends AbstractWidgetRenderer
       String              kind    = null;
       if(input.getWidgetMetaData() instanceof QWidgetMetaData widget)
       {
-         ////////////////////////////////////////////////////////////////////
-         // the widget's own permission (the admin-only activity widget),  //
-         // also when it is rendered outside the middleware's check        //
-         ////////////////////////////////////////////////////////////////////
-         PermissionsHelper.checkWidgetPermissionThrowing(input, widget.getName());
          Map<String, Serializable> defaults = widget.getDefaultValues();
          kind = defaults == null || defaults.get(KIND) == null ? null : String.valueOf(defaults.get(KIND));
       }

@@ -37,6 +37,7 @@ import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchResultSnapshot;
 import com.kingsrook.qqq.backend.core.actions.customizers.TableCustomizers;
 import com.kingsrook.qqq.backend.core.actions.dashboard.widgets.ChildRecordListRenderer;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
 import com.kingsrook.qqq.backend.core.model.data.QRecordEntity;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.AuditLevel;
 import com.kingsrook.qqq.backend.core.model.metadata.audits.QAuditRules;
@@ -109,13 +110,13 @@ public class SqlWorkbenchTableMetaDataHelper
             .withLock(shareLock(config, config.applyPrefix(SqlWorkbenchNotebookShare.TABLE_NAME) + ".audienceKey", config.applyPrefix(JOIN_SHARE_NOTEBOOK))))
          .withAuditRules(new QAuditRules().withAuditLevel(AuditLevel.RECORD))
          .withSection(new QFieldSection("identity", new QIcon("badge"), Tier.T1, List.of("id", "title", "description", "ownerName", "visibility")))
-         .withSection(new QFieldSection("runner", new QIcon("play_circle"), Tier.T2).withWidgetName(config.applyPrefix(SqlWorkbenchHomeWidgetsMetaDataProducer.NOTEBOOK_RUNNER)))
+         .withSection(new QFieldSection("runner", "Runner", new QIcon("play_circle"), Tier.T2, null).withWidgetName(config.applyPrefix(SqlWorkbenchHomeWidgetsMetaDataProducer.NOTEBOOK_RUNNER)))
          .withSection(new QFieldSection("details", new QIcon("description"), Tier.T2, List.of("defaultBackendName", "parametersJson")))
-         .withSection(widgetSection(config, JOIN_NOTEBOOK_CELL, "notes"))
-         .withSection(widgetSection(config, JOIN_NOTEBOOK_SHARE, "share"))
-         .withSection(widgetSection(config, JOIN_NOTEBOOK_SNAPSHOT, "push_pin"))
-         .withSection(widgetSection(config, JOIN_NOTEBOOK_VERSION, "history"))
-         .withSection(widgetSection(config, JOIN_NOTEBOOK_EXECUTION, "policy"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_CELL, "Cells", "notes"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_SHARE, "Shared With", "share"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_SNAPSHOT, "Pinned Results", "push_pin"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_VERSION, "Versions", "history"))
+         .withSection(widgetSection(config, JOIN_NOTEBOOK_EXECUTION, "Runs", "policy"))
          .withSection(new QFieldSection("system", new QIcon("calendar_month"), Tier.T3, List.of("ownerUserId", "currentVersion", "createDate", "modifyDate")));
       table.getField("visibility").setIsEditable(false);
       table.getField("visibility").setIsRequired(false);
@@ -337,10 +338,12 @@ public class SqlWorkbenchTableMetaDataHelper
          .getWidgetMetaData());
       widgets.add(ChildRecordListRenderer.widgetMetaDataBuilder(joins.get(config.applyPrefix(JOIN_NOTEBOOK_VERSION)))
          .withLabel("Versions").withMaxRows(25)
+         .withOrderBys(List.of(new QFilterOrderBy("versionNumber", false)))
          .withOnlyIncludeFieldNames(List.of("id", "versionNumber", "comment", "savedByName", "createDate"))
          .getWidgetMetaData());
       widgets.add(ChildRecordListRenderer.widgetMetaDataBuilder(joins.get(config.applyPrefix(JOIN_NOTEBOOK_EXECUTION)))
          .withLabel("Runs").withMaxRows(25)
+         .withOrderBys(List.of(new QFilterOrderBy("startTime", false), new QFilterOrderBy("id", false)))
          .withOnlyIncludeFieldNames(List.of("id", "startTime", "userName", "mode", "status", "durationMs", "rowsReturned", "rowsAffected", "cellKey"))
          .getWidgetMetaData());
       return (widgets);
@@ -421,9 +424,9 @@ public class SqlWorkbenchTableMetaDataHelper
    /*******************************************************************************
     ** A record-view section that shows one of the child-list widgets.
     *******************************************************************************/
-   private static QFieldSection widgetSection(SqlWorkbenchQBitConfig config, String joinName, String icon)
+   private static QFieldSection widgetSection(SqlWorkbenchQBitConfig config, String joinName, String label, String icon)
    {
-      return (new QFieldSection(config.applyPrefix(joinName), new QIcon(icon), Tier.T2).withWidgetName(config.applyPrefix(joinName)));
+      return (new QFieldSection(config.applyPrefix(joinName), label, new QIcon(icon), Tier.T2, null).withWidgetName(config.applyPrefix(joinName)));
    }
 
 

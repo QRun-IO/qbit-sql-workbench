@@ -34,10 +34,10 @@ import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
 import com.kingsrook.qqq.backend.core.actions.dashboard.RenderWidgetAction;
+import com.kingsrook.qqq.backend.core.actions.permissions.PermissionsHelper;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
-import com.kingsrook.qqq.backend.core.exceptions.QPermissionDeniedException;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.widgets.RenderWidgetInput;
 import com.kingsrook.qqq.backend.core.model.dashboard.widgets.ChartData;
@@ -50,7 +50,6 @@ import com.kingsrook.qqq.backend.core.model.session.QSession;
 import com.kingsrook.qqq.backend.core.model.session.QUser;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 
 /*******************************************************************************
@@ -219,13 +218,16 @@ class SqlWorkbenchHomeTest extends BaseSqlWorkbenchTest
 
       TableData byUser = (TableData) render(SqlWorkbenchHomeWidgetsMetaDataProducer.BY_USER);
       assertThat(byUser.getRows()).hasSize(2);
-      assertThat(cells(byUser)).contains("Name of writer-1", "writer-1", "Name of reader-1").doesNotContain("Only your own");
+      assertThat(cells(byUser)).contains("Name of writer-1", "writer-1", "Name of reader-1", "last run").doesNotContain("Only your own");
+      assertThat(byUser.getColumns()).hasSize(4);
 
       ///////////////////////////////////////////////////////////////
       // activity by user is admin-only (the widget's permission)  //
       ///////////////////////////////////////////////////////////////
+      assertThat(PermissionsHelper.hasWidgetPermission(new RenderWidgetInput(), SqlWorkbenchHomeWidgetsMetaDataProducer.BY_USER)).isTrue();
       loginAs(WRITER);
-      assertThatThrownBy(() -> render(SqlWorkbenchHomeWidgetsMetaDataProducer.BY_USER)).isInstanceOf(QPermissionDeniedException.class);
+      assertThat(PermissionsHelper.hasWidgetPermission(new RenderWidgetInput(), SqlWorkbenchHomeWidgetsMetaDataProducer.BY_USER)).isFalse();
+      assertThat(PermissionsHelper.hasWidgetPermission(new RenderWidgetInput(), SqlWorkbenchHomeWidgetsMetaDataProducer.SUMMARY)).isTrue();
       SqlWorkbenchHome.Viewer viewer = SqlWorkbenchHome.viewer(config, Instant.now());
       String                  own    = cells(SqlWorkbenchHome.load(SqlWorkbenchHome.KIND_BY_USER, viewer, new RenderWidgetInput()));
       assertThat(own).contains("Only your own runs").doesNotContain("reader-1");
@@ -319,14 +321,16 @@ class SqlWorkbenchHomeTest extends BaseSqlWorkbenchTest
       assertThat(((TableData) render(SqlWorkbenchHomeWidgetsMetaDataProducer.SLOWEST)).getNoRowsFoundHTML()).contains("No completed runs");
       assertThat(((ChartData) render(SqlWorkbenchHomeWidgetsMetaDataProducer.RUNS_PER_DAY)).getSublabel()).isEqualTo("No runs in the last 30 days");
 
-      /////////////////////////////////////////////////
-      // no workbench access: every widget is denied //
-      /////////////////////////////////////////////////
+      ////////////////////////////////////////////////////////////////////////
+      // no workbench access: every widget is denied (the middleware checks //
+      // widget permissions); rendered anyway, the locks show nothing       //
+      ////////////////////////////////////////////////////////////////////////
       loginAs("nobody-1");
       for(String name : SqlWorkbenchHomeWidgetsMetaDataProducer.homeWidgetNames())
       {
-         assertThatThrownBy(() -> render(name)).as(name).isInstanceOf(QPermissionDeniedException.class);
+         assertThat(PermissionsHelper.hasWidgetPermission(new RenderWidgetInput(), name)).as(name).isFalse();
       }
+      assertThat(((RawHTML) render(SqlWorkbenchHomeWidgetsMetaDataProducer.SUMMARY)).getHtml()).contains("can&#39;t read");
 
       ////////////////////////////////////////////////////////////////////////
       // workbench access but no table read permissions: says so, no zeros //

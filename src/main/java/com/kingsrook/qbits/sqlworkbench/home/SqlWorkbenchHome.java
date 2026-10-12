@@ -350,7 +350,7 @@ public final class SqlWorkbenchHome
          return (noAccess("the execution audit"));
       }
 
-      List<QRecord>             runs  = query(executions, new QQueryFilter().withOrderBy(new QFilterOrderBy("id", false)), ROWS, null);
+      List<QRecord>             runs  = query(executions, new QQueryFilter().withOrderBy(new QFilterOrderBy("startTime", false)).withOrderBy(new QFilterOrderBy("id", false)), ROWS, null);
       Map<Integer, String>      names = notebookTitles(viewer, input, runs);
       List<Map<String, Object>> rows  = new ArrayList<>();
       for(QRecord run : runs)
@@ -412,7 +412,7 @@ public final class SqlWorkbenchHome
 
       QQueryFilter filter = since(viewer.windowStart())
          .withCriteria(new QFilterCriteria("status", QCriteriaOperator.IN, FAILED_STATUSES))
-         .withOrderBy(new QFilterOrderBy("id", false));
+         .withOrderBy(new QFilterOrderBy("startTime", false)).withOrderBy(new QFilterOrderBy("id", false));
       List<QRecord>             runs  = query(executions, filter, ROWS, null);
       Map<Integer, String>      names = notebookTitles(viewer, input, runs);
       List<Map<String, Object>> rows  = new ArrayList<>();
@@ -532,7 +532,7 @@ public final class SqlWorkbenchHome
       }
 
       QQueryFilter filter = new QQueryFilter(new QFilterCriteria("mode", QCriteriaOperator.EQUALS, ExecutionMode.WRITE_COMMIT.name()))
-         .withOrderBy(new QFilterOrderBy("id", false));
+         .withOrderBy(new QFilterOrderBy("startTime", false)).withOrderBy(new QFilterOrderBy("id", false));
       List<QRecord>             runs  = query(executions, filter, ROWS, null);
       Map<Integer, String>      names = notebookTitles(viewer, input, runs);
       List<Map<String, Object>> rows  = new ArrayList<>();
@@ -568,7 +568,7 @@ public final class SqlWorkbenchHome
       }
 
       Map<String, Object[]> users = new LinkedHashMap<>();
-      List<QRecord>         runs  = query(executions, since(viewer.windowStart()).withOrderBy(new QFilterOrderBy("id", false)), SCAN_LIMIT,
+      List<QRecord>         runs  = query(executions, since(viewer.windowStart()).withOrderBy(new QFilterOrderBy("startTime", false)), SCAN_LIMIT,
          Set.of("id", "userId", "userName", "status", "mode", "startTime"));
       for(QRecord run : runs)
       {
@@ -587,16 +587,16 @@ public final class SqlWorkbenchHome
          Object[]            totals = entry.getValue();
          Map<String, Object> row    = new HashMap<>();
          String              name   = totals[0] == null ? entry.getKey() : String.valueOf(totals[0]);
-         row.put("user", HomeHtml.card(HomeHtml.escape(name), name.equals(entry.getKey()) ? null : HomeHtml.escape(entry.getKey())));
+         row.put("user", HomeHtml.card(HomeHtml.escape(name), name.equals(entry.getKey()) ? null : HomeHtml.escape(entry.getKey()),
+            HomeHtml.escape("last run " + HomeHtml.when((Instant) totals[4], viewer.now(), viewer.zoneId()))));
          row.put("runs", HomeHtml.number((Long) totals[1]));
          row.put("failed", HomeHtml.number((Long) totals[2]));
          row.put("writes", HomeHtml.number((Long) totals[3]));
-         row.put("lastRun", HomeHtml.escape(HomeHtml.when((Instant) totals[4], viewer.now(), viewer.zoneId())));
          rows.add(row);
       }
 
-      TableData table = table(List.of(column("User", "user"), column("Runs", "runs", "right"), column("Failed", "failed", "right"), column("Writes", "writes", "right"),
-         column("Last Run", "lastRun")), rows, "No runs in the last " + DAYS + " days.");
+      TableData table = table(List.of(column("User", "user"), column("Runs", "runs", "right"), column("Failed", "failed", "right"), column("Writes", "writes", "right")),
+         rows, "No runs in the last " + DAYS + " days.");
       if(!viewer.allAccess())
       {
          table.withFooterHTML(HomeHtml.note("Only your own runs are shown; workbench admins see every user's."));

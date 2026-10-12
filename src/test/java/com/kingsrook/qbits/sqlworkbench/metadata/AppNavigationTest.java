@@ -117,6 +117,8 @@ class AppNavigationTest extends BaseSqlWorkbenchTest
       }
       assertThat(qInstance.getJoin(SqlWorkbenchTableMetaDataHelper.JOIN_NOTEBOOK_EXECUTION).getRightTable()).isEqualTo(SqlWorkbenchExecution.TABLE_NAME);
       assertThat(qInstance.getWidget(SqlWorkbenchTableMetaDataHelper.JOIN_NOTEBOOK_EXECUTION).getLabel()).isEqualTo("Runs");
+      assertThat(notebook.getSections().stream().filter(s -> s.getWidgetName() != null).map(QFieldSection::getLabel).toList())
+         .containsExactly("Runner", "Cells", "Shared With", "Pinned Results", "Versions", "Runs");
       assertThat(notebook.getSections().get(0).getFieldNames()).containsExactly("id", "title", "description", "ownerName", "visibility");
    }
 
@@ -146,6 +148,7 @@ class AppNavigationTest extends BaseSqlWorkbenchTest
       assertThat(runs(id)).hasSize(2).allSatisfy(r -> assertThat(r.getValueString("userId")).isEqualTo(READER));
       loginAs(ADMIN);
       assertThat(runs(id)).hasSize(3);
+      assertThat(runs(id).get(0).getValueInteger("id")).isGreaterThan(runs(id).get(2).getValueInteger("id"));
    }
 
 
