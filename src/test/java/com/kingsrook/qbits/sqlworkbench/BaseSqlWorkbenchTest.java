@@ -203,11 +203,24 @@ public class BaseSqlWorkbenchTest
    /*******************************************************************************
     ** Init QContext with a session for one of the test users.
     *******************************************************************************/
-   protected QSession loginAs(String userId)
+   protected QSession loginAs(String userId, String... groups)
    {
       QSession session = TestSessionCustomizer.sessionFor(userId);
       QContext.init(qInstance, session);
+      SqlWorkbenchSecurity.applyToSession(config, session, List.of(groups));
       return (session);
+   }
+
+
+
+   /*******************************************************************************
+    ** Log in as a user and return their Caller (the session and the Caller
+    ** must agree: notebook operations run as the session).
+    *******************************************************************************/
+   protected Caller as(String userId, String... groups)
+   {
+      loginAs(userId, groups);
+      return (caller(userId));
    }
 
 
@@ -240,6 +253,14 @@ public class BaseSqlWorkbenchTest
          QSession granted = sessionFor(qSession.getUuid());
          qSession.setUser(granted.getUser());
          qSession.setPermissions(granted.getPermissions());
+         try
+         {
+            SqlWorkbenchSecurity.applyToSession(qInstance, qSession, List.of());
+         }
+         catch(Exception e)
+         {
+            throw (new IllegalStateException("SQL Workbench is not installed", e));
+         }
       }
 
 
@@ -249,20 +270,21 @@ public class BaseSqlWorkbenchTest
        *******************************************************************************/
       public static QSession sessionFor(String userId)
       {
-         QSession session = new QSession().withUser(new QUser().withIdReference(userId).withFullName("Name of " + userId));
+         SqlWorkbenchQBitConfig defaults = new SqlWorkbenchQBitConfig();
+         QSession               session  = new QSession().withUser(new QUser().withIdReference(userId).withFullName("Name of " + userId));
          session.setPermissions(new java.util.HashSet<>());
-         if(userId != null && (userId.startsWith("reader") || userId.startsWith("writer") || userId.startsWith("admin")))
+         if(userId != null && (userId.startsWith("reader") || userId.startsWith("writer")))
          {
-            session.withPermission(SqlWorkbenchQBitConfig.DEFAULT_ACCESS_PERMISSION_BASE_NAME + ".hasAccess");
+            session.getPermissions().addAll(defaults.getUserPermissionNames());
          }
          if(userId != null && userId.startsWith("admin"))
          {
-            session.withPermission(SqlWorkbenchQBitConfig.DEFAULT_ADMIN_PERMISSION_BASE_NAME + ".hasAccess");
+            session.getPermissions().addAll(defaults.getAdminPermissionNames());
          }
          if(userId != null && userId.startsWith("writer"))
          {
             session.withPermission(SqlWorkbenchQBitConfig.DEFAULT_WRITE_PERMISSION_NAME);
-            session.withPermission(SqlWorkbenchQBitConfig.DEFAULT_SHARE_PERMISSION_NAME);
+            session.getPermissions().addAll(defaults.getSharePermissionNames());
          }
          return (session);
       }

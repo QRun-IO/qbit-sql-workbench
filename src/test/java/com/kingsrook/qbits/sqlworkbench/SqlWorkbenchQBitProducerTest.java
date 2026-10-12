@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData;
+import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.dashboard.QWidgetMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.layout.QAppMetaData;
@@ -58,33 +59,63 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
          assertThat(q.getArtifactId()).isEqualTo("sql-workbench");
       });
 
-      for(String name : List.of("sqlWorkbenchNotebook", "sqlWorkbenchCell", "sqlWorkbenchNotebookVersion", "sqlWorkbenchResultSnapshot", "sqlWorkbenchExecution"))
+      ////////////////////////////////////////////////////////////////////////////
+      // name -> {insert, update, delete} capabilities: notebooks, cells and   //
+      // shares are fully editable; pinned results can be relabeled / deleted  //
+      // but only pinned from the notebook UI; versions and the audit are      //
+      // append-only. Every table is a standard per-table-permission table     //
+      // with a record security lock, and none is hidden.                      //
+      ////////////////////////////////////////////////////////////////////////////
+      Map<String, List<Boolean>> capabilities = new java.util.LinkedHashMap<>();
+      capabilities.put("sqlWorkbenchNotebook", List.of(true, true, true));
+      capabilities.put("sqlWorkbenchCell", List.of(true, true, true));
+      capabilities.put("sqlWorkbenchNotebookShare", List.of(true, true, true));
+      capabilities.put("sqlWorkbenchResultSnapshot", List.of(false, true, true));
+      capabilities.put("sqlWorkbenchNotebookVersion", List.of(false, false, false));
+      capabilities.put("sqlWorkbenchExecution", List.of(false, false, false));
+      for(Map.Entry<String, List<Boolean>> entry : capabilities.entrySet())
       {
+         String         name  = entry.getKey();
          QTableMetaData table = qInstance.getTable(name);
          assertThat(table).as(name).isNotNull();
          assertThat(table.getBackendName()).isEqualTo(BACKEND_NAME);
-         assertThat(table.getPermissionRules().getLevel()).isEqualTo(PermissionLevel.HAS_ACCESS_PERMISSION);
-         assertThat(table.getPermissionRules().getPermissionBaseName()).as("tables need the admin permission, not plain access").isEqualTo("sqlWorkbenchAdmin");
-         boolean writable = name.equals("sqlWorkbenchNotebook");
-         assertThat(table.isCapabilityEnabled(qInstance.getBackend(BACKEND_NAME), com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_INSERT)).as(name).isEqualTo(writable);
-         assertThat(table.isCapabilityEnabled(qInstance.getBackend(BACKEND_NAME), com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_UPDATE)).as(name).isEqualTo(writable);
-         assertThat(table.isCapabilityEnabled(qInstance.getBackend(BACKEND_NAME), com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_DELETE)).as(name).isEqualTo(writable);
+         assertThat(table.getIsHidden()).as(name).isFalse();
+         assertThat(table.getPermissionRules().getLevel()).as(name).isEqualTo(PermissionLevel.READ_INSERT_EDIT_DELETE_PERMISSIONS);
+         assertThat(table.getRecordSecurityLocks()).as(name).isNotEmpty();
+         com.kingsrook.qqq.backend.core.model.metadata.QBackendMetaData backend = qInstance.getBackend(BACKEND_NAME);
+         assertThat(table.isCapabilityEnabled(backend, com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_INSERT)).as(name + " insert").isEqualTo(entry.getValue().get(0));
+         assertThat(table.isCapabilityEnabled(backend, com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_UPDATE)).as(name + " update").isEqualTo(entry.getValue().get(1));
+         assertThat(table.isCapabilityEnabled(backend, com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_DELETE)).as(name + " delete").isEqualTo(entry.getValue().get(2));
+         assertThat(table.isCapabilityEnabled(backend, com.kingsrook.qqq.backend.core.model.metadata.tables.Capability.TABLE_EXPORT)).as(name + " export").isTrue();
          assertThat(((RDBMSTableBackendDetails) table.getBackendDetails()).getTableName()).startsWith("sql_workbench_");
          assertThat(table.getSourceQBitName()).isNotBlank();
       }
+      assertThat(qInstance.getSecurityKeyType("sqlWorkbenchUser").getAllAccessKeyName()).isEqualTo("sqlWorkbenchAllAccess");
+      assertThat(qInstance.getSecurityKeyType("sqlWorkbenchAudience")).isNotNull();
+
+      ////////////////////////////////////////////////////////////////////////
+      // role-management UIs list available permissions without a QContext //
+      // instance; the record actions must not break that                  //
+      ////////////////////////////////////////////////////////////////////////
+      QContext.clear();
+      assertThat(com.kingsrook.qqq.backend.core.actions.permissions.PermissionsHelper.getAllAvailablePermissionNames(qInstance))
+         .contains("sqlWorkbenchNotebook.read", "sqlWorkbenchNotebookShare.insert", "sqlWorkbench.hasAccess")
+         .doesNotContain("sqlWorkbenchExecution.delete", "sqlWorkbenchNotebookVersion.insert");
+      loginAs(READER);
 
       QWidgetMetaData widget = (QWidgetMetaData) qInstance.getWidget(SqlWorkbenchWidgetMetaDataProducer.NAME);
       assertThat(widget.getType()).isEqualTo("SQL_WORKBENCH");
 
       QAppMetaData app = qInstance.getApp(SqlWorkbenchAppMetaDataProducer.APP_NAME);
       assertThat(app.getWidgets()).containsExactly(SqlWorkbenchWidgetMetaDataProducer.NAME);
-      assertThat(app.getChildren()).extracting(c -> c.getName()).containsExactly(SqlWorkbenchNotebook.TABLE_NAME, SqlWorkbenchExecution.TABLE_NAME);
+      assertThat(app.getChildren()).extracting(c -> c.getName()).containsExactly("sqlWorkbenchNotebook", "sqlWorkbenchCell", "sqlWorkbenchNotebookShare",
+         "sqlWorkbenchResultSnapshot", "sqlWorkbenchNotebookVersion", "sqlWorkbenchExecution");
       assertThat(app.getPermissionRules().getPermissionBaseName()).isEqualTo("sqlWorkbench");
-      //////////////////////////////////////////////////////////////////
-      // the qbit produces no processes (only QQQ's generic bulk ones //
-      // are added to its tables by the enricher)                     //
-      //////////////////////////////////////////////////////////////////
-      assertThat(qInstance.getProcesses() == null ? Map.of() : qInstance.getProcesses()).allSatisfy((name, process) -> assertThat(name).contains("."));
+      ///////////////////////////////////////////////////////////////////
+      // the qbit's own processes are record actions on its tables and //
+      // never app children (the nav only lists tables and the widget) //
+      ///////////////////////////////////////////////////////////////////
+      assertThat(app.getChildren()).allSatisfy(child -> assertThat(child).isInstanceOf(QTableMetaData.class));
 
       assertThat(QJavalinMetaData.of(qInstance).getAdditionalRouteProviderReferences()).isNotEmpty();
       assertThat(SqlWorkbenchRuntime.get(qInstance)).isNotNull();

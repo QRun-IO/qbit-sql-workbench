@@ -41,6 +41,15 @@ import com.kingsrook.qbits.sqlworkbench.engine.SessionGuard;
 import com.kingsrook.qbits.sqlworkbench.engine.SqlExecutionEngine;
 import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchExecution;
 import com.kingsrook.qbits.sqlworkbench.notebook.NotebookService;
+import com.kingsrook.qqq.backend.core.model.session.QSession;
+import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.actions.tables.count.CountInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
+import com.kingsrook.qqq.backend.core.actions.tables.CountAction;
+import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchCell;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebook;
+import com.kingsrook.qbits.sqlworkbench.model.SqlWorkbenchNotebookShare;
 import com.kingsrook.qbits.sqlworkbench.schema.SchemaIntrospector;
 import com.kingsrook.qbits.sqlworkbench.sql.SqlDialect;
 import com.kingsrook.qqq.backend.module.postgres.model.metadata.PostgreSQLBackendMetaData;
@@ -117,7 +126,7 @@ class PostgresIntegrationTest
       try(Connection connection = java.sql.DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
           Statement statement = connection.createStatement())
       {
-         statement.execute("TRUNCATE sql_workbench_result_snapshot, sql_workbench_notebook_version, sql_workbench_cell, sql_workbench_notebook, sql_workbench_execution");
+         statement.execute("TRUNCATE sql_workbench_notebook_share, sql_workbench_result_snapshot, sql_workbench_notebook_version, sql_workbench_cell, sql_workbench_notebook, sql_workbench_execution");
          statement.execute("DROP TABLE IF EXISTS scratch");
       }
 
@@ -231,7 +240,7 @@ class PostgresIntegrationTest
          statement.execute("DELETE FROM person WHERE first_name = 'after'");
       }
 
-      List<SqlWorkbenchExecution> audits = QueryAction.execute(SqlWorkbenchExecution.TABLE_NAME, SqlWorkbenchExecution.class, new QQueryFilter());
+      List<SqlWorkbenchExecution> audits = SystemUser.call(() -> QueryAction.execute(SqlWorkbenchExecution.TABLE_NAME, SqlWorkbenchExecution.class, new QQueryFilter()));
       assertThat(audits).extracting(SqlWorkbenchExecution::getStatus).contains("SUCCEEDED", "TIMED_OUT");
    }
 
@@ -383,6 +392,56 @@ class PostgresIntegrationTest
             return (rs.getInt(1));
          }
       }
+   }
+
+
+   /*******************************************************************************
+    ** The record locks on PostgreSQL: owner / user share / library reads
+    ** through the core actions, one row per notebook even when it matches
+    ** several shares (SELECT DISTINCT / COUNT(DISTINCT) over TEXT columns),
+    ** and a reader cannot write a shared notebook's children.
+    *******************************************************************************/
+   @Test
+   void testRecordLocksOnPostgres() throws Exception
+   {
+      NotebookService notebooks = new NotebookService(SqlWorkbenchRuntime.get(qInstance));
+      login("writer-1");
+      Integer both     = (Integer) notebooks.create(Map.of("title", "Both", "description", "long text", "cells", List.of(Map.of("cellType", "SQL", "content", "SELECT 1"))), writer()).get("id");
+      Integer personal = (Integer) notebooks.create(Map.of("title", "Personal", "cells", List.of(Map.of("cellType", "SQL", "content", "SELECT 2"))), writer()).get("id");
+      notebooks.publish(both, true, writer());
+      QRecord share = new InsertAction().execute(new InsertInput(SqlWorkbenchNotebookShare.TABLE_NAME).withRecord(new QRecord()
+         .withValue("notebookId", both).withValue("audienceType", "USER").withValue("audienceId", "reader-2"))).getRecords().get(0);
+      assertThat(share.getErrors()).isNullOrEmpty();
+
+      login("reader-2");
+      assertThat(QueryAction.execute(SqlWorkbenchNotebook.TABLE_NAME, new QQueryFilter())).extracting(r -> r.getValueInteger("id")).containsExactly(both);
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchNotebook.TABLE_NAME)).getCount()).isEqualTo(1);
+      assertThat(QueryAction.execute(SqlWorkbenchCell.TABLE_NAME, new QQueryFilter())).hasSize(1);
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchCell.TABLE_NAME)).getCount()).isEqualTo(1);
+      assertThat(QueryAction.execute(SqlWorkbenchNotebookShare.TABLE_NAME, new QQueryFilter())).hasSize(2);
+      assertThat(new InsertAction().execute(new InsertInput(SqlWorkbenchCell.TABLE_NAME).withRecord(new QRecord().withValue("notebookId", both).withValue("content", "x")))
+         .getRecords().get(0).getErrors()).isNotEmpty();
+      assertThat(new InsertAction().execute(new InsertInput(SqlWorkbenchCell.TABLE_NAME).withRecord(new QRecord().withValue("notebookId", personal).withValue("content", "x")))
+         .getRecords().get(0).getErrors()).isNotEmpty();
+
+      login("admin-1");
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchNotebook.TABLE_NAME)).getCount()).isEqualTo(2);
+
+      login("writer-1");
+      notebooks.delete(both, writer());
+      assertThat(new CountAction().execute(new CountInput(SqlWorkbenchNotebookShare.TABLE_NAME)).getCount()).isZero();
+   }
+
+
+
+   /*******************************************************************************
+    ** Log in with the workbench security keys.
+    *******************************************************************************/
+   private void login(String userId)
+   {
+      QSession session = BaseSqlWorkbenchTest.TestSessionCustomizer.sessionFor(userId);
+      QContext.init(qInstance, session);
+      SqlWorkbenchSecurity.applyToSession(config, session, List.of());
    }
 
 }
