@@ -19,17 +19,27 @@ package com.kingsrook.qbits.sqlworkbench.engine;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.UpdateAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
+import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterOrderBy;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
+import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.session.QSystemUserSession;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertOutput;
@@ -53,10 +63,20 @@ public class ExecutionAuditor
 
    public static final int MAX_ERROR_LENGTH = 4000;
 
-   public static final long PRUNE_INTERVAL_MILLIS = 60L * 60 * 1000;
+   public static final long PRUNE_INTERVAL_MILLIS     = 60L * 60 * 1000;
+   public static final long FIRST_PRUNE_DELAY_MILLIS  = 5L * 60 * 1000;
+   public static final int  BATCH_SIZE                = 1000;
+   public static final int  MAX_BATCHES               = 20;
+
+   private static final ExecutorService PRUNER = Executors.newSingleThreadExecutor(runnable ->
+   {
+      Thread thread = new Thread(runnable, "sql-workbench-audit-prune");
+      thread.setDaemon(true);
+      return (thread);
+   });
 
    private final SqlWorkbenchQBitConfig config;
-   private final AtomicLong             lastPruneMillis = new AtomicLong(0);
+   private final AtomicLong             lastPruneMillis = new AtomicLong(System.currentTimeMillis() - PRUNE_INTERVAL_MILLIS + FIRST_PRUNE_DELAY_MILLIS);
 
 
 
@@ -105,38 +125,72 @@ public class ExecutionAuditor
 
 
    /*******************************************************************************
-    ** Apply auditRetentionDays, at most once an hour per auditor. Never fails
-    ** the run being audited: a failed prune is logged and tried again later.
+    ** For tests: make the next pruneIfDue start a pass now.
     *******************************************************************************/
-   void pruneIfDue()
+   void allowPruneNow()
+   {
+      lastPruneMillis.set(0);
+   }
+
+
+
+   /*******************************************************************************
+    ** Apply auditRetentionDays in the background, at most once an hour per
+    ** process, and never the moment a process starts (the first pass is
+    ** FIRST_PRUNE_DELAY_MILLIS after construction, so restarts and rolling
+    ** deploys do not each trigger a pass). Never delays or fails the run being
+    ** audited: a failed pass is logged and tried again an hour later.
+    **
+    ** Across replicas: the qbit has no table for shared state, so each replica
+    ** keeps its own hourly limit. That is safe because a pass is bounded
+    ** (MAX_BATCHES batches of BATCH_SIZE rows) and idempotent: replicas that
+    ** overlap delete rows another replica already deleted, which costs one
+    ** cheap query. N replicas therefore cost at most N bounded passes an hour.
+    **
+    ** @return the pending pass, or null when none was started
+    *******************************************************************************/
+   Future<?> pruneIfDue()
    {
       if(config.getAuditRetentionDays() == null)
       {
-         return;
+         return (null);
       }
 
       long now  = System.currentTimeMillis();
       long last = lastPruneMillis.get();
       if(now - last < PRUNE_INTERVAL_MILLIS || !lastPruneMillis.compareAndSet(last, now))
       {
-         return;
+         return (null);
       }
 
-      try
+      QInstance qInstance = QContext.getQInstance();
+      Instant   cutoff    = Instant.ofEpochMilli(now).minus(Duration.ofDays(config.getAuditRetentionDays()));
+      return (PRUNER.submit(() ->
       {
-         pruneOlderThan(Instant.ofEpochMilli(now).minus(Duration.ofDays(config.getAuditRetentionDays())));
-      }
-      catch(Exception e)
-      {
-         LOG.warn("Could not prune old SQL Workbench audit rows", e);
-      }
+         QContext.init(qInstance, new QSystemUserSession());
+         try
+         {
+            pruneOlderThan(cutoff);
+         }
+         catch(Exception e)
+         {
+            LOG.warn("Could not prune old SQL Workbench audit rows", e);
+         }
+         finally
+         {
+            QContext.clear();
+         }
+      }));
    }
 
 
 
    /*******************************************************************************
     ** Delete audit rows that started before a cutoff (system user; the table is
-    ** otherwise append-only). Rows still RUNNING are kept.
+    ** otherwise append-only), in batches of BATCH_SIZE ids (so a large backlog
+    ** never loads whole rows, with their SQL text, or builds an unbounded IN
+    ** list), at most MAX_BATCHES batches per call; the rest goes on the next
+    ** pass. Rows still RUNNING are kept.
     **
     ** @return the number of rows deleted
     *******************************************************************************/
@@ -145,9 +199,27 @@ public class ExecutionAuditor
       int[] deleted = new int[1];
       asSystem(() ->
       {
-         QQueryFilter filter = new QQueryFilter(new QFilterCriteria("startTime", QCriteriaOperator.LESS_THAN, cutoff))
-            .withCriteria(new QFilterCriteria("status", QCriteriaOperator.NOT_EQUALS, ExecutionStatus.RUNNING.name()));
-         deleted[0] = new DeleteAction().execute(new DeleteInput(tableName()).withQueryFilter(filter)).getDeletedRecordCount();
+         for(int batch = 0; batch < MAX_BATCHES; batch++)
+         {
+            QQueryFilter filter = new QQueryFilter(new QFilterCriteria("startTime", QCriteriaOperator.LESS_THAN, cutoff))
+               .withCriteria(new QFilterCriteria("status", QCriteriaOperator.NOT_EQUALS, ExecutionStatus.RUNNING.name()))
+               .withOrderBy(new QFilterOrderBy("id"))
+               .withLimit(BATCH_SIZE);
+            List<Serializable> ids = new ArrayList<>();
+            for(QRecord record : new QueryAction().execute(new QueryInput(tableName()).withFilter(filter)).getRecords())
+            {
+               ids.add(record.getValueInteger("id"));
+            }
+            if(ids.isEmpty())
+            {
+               return;
+            }
+            deleted[0] += new DeleteAction().execute(new DeleteInput(tableName()).withPrimaryKeys(ids)).getDeletedRecordCount();
+            if(ids.size() < BATCH_SIZE)
+            {
+               return;
+            }
+         }
       });
       return (deleted[0]);
    }

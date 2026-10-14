@@ -105,7 +105,7 @@ public class SnakeCaseCustomizer implements MetaDataCustomizerInterface<QTableMe
 
 All six tables are user content (notebooks, cells, shares, pinned snapshots) or logs (versions, the execution audit), so none is seeded: they start empty, and each table's help (`help/sql-workbench.yaml`, shown on the table screen) says how its rows get created. No host include or action is needed.
 
-Retention: `notebookVersionRetention` (default 100) prunes the oldest versions of a notebook on save. `auditRetentionDays` (default null: keep forever) deletes execution audit rows older than that many days, at most once an hour as a run is audited.
+Retention: `notebookVersionRetention` (default 100) prunes the oldest versions of a notebook on save. `auditRetentionDays` (default null: keep forever) deletes execution audit rows older than that many days, in the background in bounded batches, at most once an hour per process, triggered as a run is audited.
 
 ## Storage upgrade from 1.0.0-RC.1
 

@@ -491,46 +491,81 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
-    ** auditRetentionDays deletes audit rows older than the window (and only
-    ** those), when the next run is audited; the default keeps everything.
+    ** auditRetentionDays deletes audit rows older than the window, in the
+    ** background, and only those: a 40-day-old RUNNING row survives. The default
+    ** keeps everything, and a process does not prune the moment it starts.
     *******************************************************************************/
    @Test
    void testAuditRetentionPrunesOldRows() throws Exception
    {
       ExecutionAuditor auditor = new ExecutionAuditor(config);
       java.time.Instant old    = java.time.Instant.now().minus(java.time.Duration.ofDays(40));
-      for(String uuid : List.of("00000000-0000-0000-0000-0000000000a1", "00000000-0000-0000-0000-0000000000a2"))
+      for(String[] row : new String[][] { { "a1", "REJECTED" }, { "a2", "REJECTED" }, { "r1", "RUNNING" } })
       {
-         auditor.record(new SqlWorkbenchExecution().withExecutionUuid(uuid).withUserId(READER).withBackendName(BACKEND_NAME)
-            .withMode(ExecutionMode.READ_ONLY.name()).withStatus(ExecutionStatus.REJECTED.name()).withSqlText("SELECT 1").withStartTime(old));
+         auditor.record(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000" + row[0]).withUserId(READER).withBackendName(BACKEND_NAME)
+            .withMode(ExecutionMode.READ_ONLY.name()).withStatus(row[1]).withSqlText("SELECT 1").withStartTime(old));
       }
-      assertThat(audits()).hasSize(2);
+      assertThat(audits()).hasSize(3);
 
       ////////////////////////////////////////////////////////////
       // default (null): nothing is ever pruned                  //
       ////////////////////////////////////////////////////////////
       run("SELECT 1", Map.of(), READER);
-      assertThat(audits()).hasSize(3);
+      auditor.allowPruneNow();
+      assertThat(auditor.pruneIfDue()).isNull();
+      assertThat(audits()).hasSize(4);
 
       ////////////////////////////////////////////////////////////////////
-      // 30 days: the two 40-day-old rows go, the fresh one stays        //
+      // 30 days: a fresh auditor waits out its start-up delay           //
       ////////////////////////////////////////////////////////////////////
       config.setAuditRetentionDays(30);
       ExecutionAuditor pruning = new ExecutionAuditor(config);
-      pruning.start(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000b1").withUserId(READER).withBackendName(BACKEND_NAME)
-         .withMode(ExecutionMode.READ_ONLY.name()).withSqlText("SELECT 2").withStartTime(java.time.Instant.now()));
-      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid).doesNotContain("00000000-0000-0000-0000-0000000000a1", "00000000-0000-0000-0000-0000000000a2");
-      assertThat(audits()).hasSize(2);
+      assertThat(pruning.pruneIfDue()).as("no pass right after start-up").isNull();
 
-      ////////////////////////////////////////////////////////////
-      // throttled: a second run within the hour does not prune  //
-      ////////////////////////////////////////////////////////////
+      pruning.allowPruneNow();
+      pruning.pruneIfDue().get();
+      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid)
+         .doesNotContain("00000000-0000-0000-0000-0000000000a1", "00000000-0000-0000-0000-0000000000a2")
+         .contains("00000000-0000-0000-0000-0000000000r1");
+      assertThat(audits()).as("the old RUNNING row and the fresh run").hasSize(2);
+      assertThat(pruning.pruneIfDue()).as("at most hourly").isNull();
+      assertThat(pruning.pruneOlderThan(java.time.Instant.now().minus(java.time.Duration.ofDays(30)))).as("RUNNING rows are never deleted").isZero();
+
+      ////////////////////////////////////////////////////////////////////////////
+      // the pass that start() triggers runs in the background and spares RUNNING //
+      ////////////////////////////////////////////////////////////////////////////
       auditor.record(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000a3").withUserId(READER).withBackendName(BACKEND_NAME)
          .withMode(ExecutionMode.READ_ONLY.name()).withStatus(ExecutionStatus.REJECTED.name()).withSqlText("SELECT 1").withStartTime(old));
-      pruning.start(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000b2").withUserId(READER).withBackendName(BACKEND_NAME)
-         .withMode(ExecutionMode.READ_ONLY.name()).withSqlText("SELECT 3").withStartTime(java.time.Instant.now()));
-      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid).contains("00000000-0000-0000-0000-0000000000a3");
-      assertThat(pruning.pruneOlderThan(java.time.Instant.now().minus(java.time.Duration.ofDays(30)))).isEqualTo(1);
+      pruning.allowPruneNow();
+      pruning.start(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000b1").withUserId(READER).withBackendName(BACKEND_NAME)
+         .withMode(ExecutionMode.READ_ONLY.name()).withSqlText("SELECT 2").withStartTime(java.time.Instant.now()));
+      for(int i = 0; i < 100 && audits().stream().anyMatch(a -> a.getExecutionUuid().endsWith("a3")); i++)
+      {
+         Thread.sleep(50);
+      }
+      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid).doesNotContain("00000000-0000-0000-0000-0000000000a3")
+         .contains("00000000-0000-0000-0000-0000000000r1");
+   }
+
+
+
+   /*******************************************************************************
+    ** A backlog bigger than one batch is deleted in bounded batches.
+    *******************************************************************************/
+   @Test
+   void testAuditRetentionDeletesInBatches() throws Exception
+   {
+      config.setAuditRetentionDays(30);
+      ExecutionAuditor auditor = new ExecutionAuditor(config);
+      java.time.Instant old = java.time.Instant.now().minus(java.time.Duration.ofDays(40));
+      int total = ExecutionAuditor.BATCH_SIZE + 5;
+      for(int i = 0; i < total; i++)
+      {
+         auditor.record(new SqlWorkbenchExecution().withExecutionUuid(java.util.UUID.randomUUID().toString()).withUserId(READER).withBackendName(BACKEND_NAME)
+            .withMode(ExecutionMode.READ_ONLY.name()).withStatus(ExecutionStatus.REJECTED.name()).withSqlText("SELECT 1").withStartTime(old));
+      }
+      assertThat(auditor.pruneOlderThan(java.time.Instant.now().minus(java.time.Duration.ofDays(30)))).isEqualTo(total);
+      assertThat(audits()).isEmpty();
    }
 
 
