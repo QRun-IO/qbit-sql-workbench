@@ -491,6 +491,64 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
+    ** auditRetentionDays deletes audit rows older than the window (and only
+    ** those), when the next run is audited; the default keeps everything.
+    *******************************************************************************/
+   @Test
+   void testAuditRetentionPrunesOldRows() throws Exception
+   {
+      ExecutionAuditor auditor = new ExecutionAuditor(config);
+      java.time.Instant old    = java.time.Instant.now().minus(java.time.Duration.ofDays(40));
+      for(String uuid : List.of("00000000-0000-0000-0000-0000000000a1", "00000000-0000-0000-0000-0000000000a2"))
+      {
+         auditor.record(new SqlWorkbenchExecution().withExecutionUuid(uuid).withUserId(READER).withBackendName(BACKEND_NAME)
+            .withMode(ExecutionMode.READ_ONLY.name()).withStatus(ExecutionStatus.REJECTED.name()).withSqlText("SELECT 1").withStartTime(old));
+      }
+      assertThat(audits()).hasSize(2);
+
+      ////////////////////////////////////////////////////////////
+      // default (null): nothing is ever pruned                  //
+      ////////////////////////////////////////////////////////////
+      run("SELECT 1", Map.of(), READER);
+      assertThat(audits()).hasSize(3);
+
+      ////////////////////////////////////////////////////////////////////
+      // 30 days: the two 40-day-old rows go, the fresh one stays        //
+      ////////////////////////////////////////////////////////////////////
+      config.setAuditRetentionDays(30);
+      ExecutionAuditor pruning = new ExecutionAuditor(config);
+      pruning.start(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000b1").withUserId(READER).withBackendName(BACKEND_NAME)
+         .withMode(ExecutionMode.READ_ONLY.name()).withSqlText("SELECT 2").withStartTime(java.time.Instant.now()));
+      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid).doesNotContain("00000000-0000-0000-0000-0000000000a1", "00000000-0000-0000-0000-0000000000a2");
+      assertThat(audits()).hasSize(2);
+
+      ////////////////////////////////////////////////////////////
+      // throttled: a second run within the hour does not prune  //
+      ////////////////////////////////////////////////////////////
+      auditor.record(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000a3").withUserId(READER).withBackendName(BACKEND_NAME)
+         .withMode(ExecutionMode.READ_ONLY.name()).withStatus(ExecutionStatus.REJECTED.name()).withSqlText("SELECT 1").withStartTime(old));
+      pruning.start(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000b2").withUserId(READER).withBackendName(BACKEND_NAME)
+         .withMode(ExecutionMode.READ_ONLY.name()).withSqlText("SELECT 3").withStartTime(java.time.Instant.now()));
+      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid).contains("00000000-0000-0000-0000-0000000000a3");
+      assertThat(pruning.pruneOlderThan(java.time.Instant.now().minus(java.time.Duration.ofDays(30)))).isEqualTo(1);
+   }
+
+
+
+   /*******************************************************************************
+    ** auditRetentionDays must be positive when set.
+    *******************************************************************************/
+   @Test
+   void testAuditRetentionValidation()
+   {
+      java.util.List<String> errors = new java.util.ArrayList<>();
+      new com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig().withBackendName(BACKEND_NAME).withAuditRetentionDays(0).validate(null, errors);
+      assertThat(errors).anyMatch(e -> e.contains("auditRetentionDays"));
+   }
+
+
+
+   /*******************************************************************************
     ** A connection that cannot be opened answers with a generic message: the
     ** driver's (URL, host, user) stays in the server log.
     *******************************************************************************/

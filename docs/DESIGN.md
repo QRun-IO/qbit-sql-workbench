@@ -190,7 +190,7 @@ Publishing in the notebook UI inserts (or deletes) the `ALL` share; the share cu
 | clientIp | STRING(64) | from the request, when available |
 | createDate | DATE_TIME | |
 
-The audit table has its insert, edit, and delete capabilities disabled in the QQQ metadata, so the UI and generic API do not offer those operations, and its customizer rejects them in the core actions for every session but the system user (admins included). Its record lock shows each user their own rows (admins all). The engine writes it through QQQ actions with a system session context. The row is inserted **before** execution (`RUNNING`). If that insert fails, the SQL **does not run** (fail closed). The row is updated at the end. Retention: `auditRetentionDays` (default unlimited; the host prunes).
+The audit table has its insert, edit, and delete capabilities disabled in the QQQ metadata, so the UI and generic API do not offer those operations, and its customizer rejects them in the core actions for every session but the system user (admins included). Its record lock shows each user their own rows (admins all). The engine writes it through QQQ actions with a system session context. The row is inserted **before** execution (`RUNNING`). If that insert fails, the SQL **does not run** (fail closed). The row is updated at the end. Retention: `auditRetentionDays` (default unlimited; when set, rows whose run started earlier than that many days ago are deleted, at most once an hour, as a run is audited).
 
 ---
 

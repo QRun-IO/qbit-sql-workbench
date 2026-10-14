@@ -1,5 +1,9 @@
 # Upgrading
 
+## Table help and `auditRetentionDays` (unreleased)
+
+No action needed. The qbit now fills empty `help` slots on its app and tables (help a host already set is kept). The new `auditRetentionDays` config defaults to null, which keeps every audit row as before; set it to bound the size of `sql_workbench_execution`. `notebookVersionRetention` (default 100 per notebook) was already enforced. There is no DDL change and no seed.
+
 ## To 1.0.0-RC.4: snake_case names (metadata only)
 
 The rename shipped in 1.0.0-RC.4. 1.0.0-RC.3 on Maven Central is an accidental republish of the RC.2 code (see CHANGELOG.md), so upgrading from RC.3 is the same as upgrading from RC.2.
