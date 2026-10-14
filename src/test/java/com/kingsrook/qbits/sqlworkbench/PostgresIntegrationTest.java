@@ -240,6 +240,70 @@ class PostgresIntegrationTest
 
 
    /*******************************************************************************
+    ** Referential integrity guardrail: every join and every table possible-value
+    ** reference between the workbench's tables has a foreign key in the shipped
+    ** DDL, or an exemption with its reason. A new reference without a
+    ** constraint fails here.
+    *******************************************************************************/
+   @Test
+   void testShippedDdlHasAForeignKeyForEveryReference() throws Exception
+   {
+      ///////////////////////////////////////////////////////////////////////////
+      // "child.column" -> why it is deliberately not a foreign key           //
+      ///////////////////////////////////////////////////////////////////////////
+      Map<String, String> exempt = Map.of(
+         "sql_workbench_execution.notebook_id", "the execution audit is append-only and outlives its notebook: no CASCADE into it, "
+            + "RESTRICT would block deleting any notebook that ever ran, SET NULL would rewrite audit rows, and an execution records "
+            + "the client's notebook id even if the notebook was deleted meanwhile (the audit insert must never fail)");
+
+      java.util.Set<String> references = new java.util.TreeSet<>();
+      for(com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData table : qInstance.getTables().values())
+      {
+         for(com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData field : table.getFields().values())
+         {
+            if(field.getPossibleValueSourceName() != null && qInstance.getTable(field.getPossibleValueSourceName()) != null)
+            {
+               references.add(table.getName() + "." + field.getBackendName());
+            }
+         }
+      }
+      for(com.kingsrook.qqq.backend.core.model.metadata.joins.QJoinMetaData join : qInstance.getJoins().values())
+      {
+         ////////////////////////////////////////////////////////////////////////
+         // the referencing side is the one whose field is not its primary key //
+         ////////////////////////////////////////////////////////////////////////
+         com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData left  = qInstance.getTable(join.getLeftTable());
+         com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData right = qInstance.getTable(join.getRightTable());
+         join.getJoinOns().forEach(on -> references.add(on.getRightField().equals(right.getPrimaryKeyField())
+            ? left.getName() + "." + left.getField(on.getLeftField()).getBackendName()
+            : right.getName() + "." + right.getField(on.getRightField()).getBackendName()));
+      }
+      assertThat(references).as("the workbench's references").contains("sql_workbench_cell.notebook_id", "sql_workbench_execution.notebook_id");
+
+      java.util.Set<String> foreignKeys = new java.util.HashSet<>();
+      try(Connection connection = java.sql.DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+          Statement statement = connection.createStatement();
+          ResultSet result = statement.executeQuery("""
+             SELECT c.conrelid::regclass::text || '.' || a.attname
+             FROM pg_constraint c
+             JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+             WHERE c.contype = 'f'
+             """))
+      {
+         while(result.next())
+         {
+            foreignKeys.add(result.getString(1));
+         }
+      }
+
+      java.util.List<String> missing = references.stream().filter(r -> !foreignKeys.contains(r) && !exempt.containsKey(r)).toList();
+      assertThat(missing).as("references without a foreign key (add one to docs/ddl/postgres.sql, or an exemption with a reason)").isEmpty();
+      assertThat(foreignKeys).as("exemptions that now have a foreign key").doesNotContainAnyElementsOf(exempt.keySet());
+   }
+
+
+
+   /*******************************************************************************
     ** The database itself refuses writes in a workbench read-only session,
     ** even for SQL the classifier would never let through.
     *******************************************************************************/
