@@ -204,6 +204,42 @@ class PostgresIntegrationTest
 
 
    /*******************************************************************************
+    ** The shipped DDL gives every foreign-key column and the notebook_id the
+    ** "Runs" list joins on a leading index, so notebook pages and notebook
+    ** deletes do not scan the child tables.
+    *******************************************************************************/
+   @Test
+   void testShippedDdlIndexesNotebookChildColumns() throws Exception
+   {
+      String sql = """
+         SELECT c.conrelid::regclass::text || '.' || a.attname
+         FROM pg_constraint c
+         JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+         WHERE c.contype = 'f' AND c.conrelid::regclass::text LIKE 'sql_workbench_%'
+           AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1])
+         """;
+      try(Connection connection = java.sql.DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+          Statement statement = connection.createStatement())
+      {
+         java.util.List<String> unindexed = new java.util.ArrayList<>();
+         try(java.sql.ResultSet result = statement.executeQuery(sql))
+         {
+            while(result.next())
+            {
+               unindexed.add(result.getString(1));
+            }
+         }
+         assertThat(unindexed).isEmpty();
+         try(java.sql.ResultSet result = statement.executeQuery("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_sql_workbench_execution_notebook'"))
+         {
+            assertThat(result.next()).isTrue();
+         }
+      }
+   }
+
+
+
+   /*******************************************************************************
     ** The database itself refuses writes in a workbench read-only session,
     ** even for SQL the classifier would never let through.
     *******************************************************************************/
