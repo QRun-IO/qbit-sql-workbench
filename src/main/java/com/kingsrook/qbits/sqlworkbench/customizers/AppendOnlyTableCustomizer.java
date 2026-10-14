@@ -28,7 +28,7 @@ import com.kingsrook.qqq.backend.core.model.data.QRecord;
 
 /*******************************************************************************
  ** Notebook versions and the execution audit are append-only: only the qbit
- ** itself (the system user) inserts them, and only its retention pruning
+ ** itself (the system user) inserts them, and only its retention pruning (auditRetentionDays, notebookVersionRetention)
  ** deletes them. The tables also lack the insert / update / delete
  ** capabilities, which hides those operations in the UI and API; this
  ** customizer enforces it in the core actions, whoever calls them (admins

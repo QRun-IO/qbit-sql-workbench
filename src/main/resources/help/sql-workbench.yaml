@@ -1,0 +1,43 @@
+bundle: sql-workbench
+version: 1
+layer: QBIT
+# Help for the SQL Workbench app and every sql_workbench_* table, in the QQQ
+# help-bundle format (qqq#1198). Each table entry says what the table is for and
+# how its rows get created, so an empty table explains itself. SqlWorkbenchHelp
+# applies it until the core HelpBundles registry ships in a QQQ release.
+# Summaries stay under 120 characters (SqlWorkbenchTablesGuardrailTest).
+entries:
+  - key: app:sqlWorkbench;slot:help
+    summary: "Run SQL against your backends in notebooks: read-only by default, write mode gated, everything audited."
+    content: |
+      Nothing needs to be set up: every table here holds notebooks you write or a record of what ran. Open the Runner to write your first query and save it as a notebook. The Dashboard lists your notebooks and recent runs.
+
+  - key: table:sql_workbench_notebook;slot:help
+    summary: "Saved SQL notebooks: a title, the target backend, parameters and sharing."
+    content: |
+      **How rows get created:** you create them. Open the Runner, write your SQL and Save, or use New here. Duplicate Notebook makes a personal copy of one you can read, and Share Notebook lets others read or edit yours. A new installation has none; this is your own content.
+
+  - key: table:sql_workbench_cell;slot:help
+    summary: "The SQL and text cells that make up each notebook, in order."
+    content: |
+      **How rows get created:** by the notebook editor. Each cell you add in the Runner (SQL or markdown) is saved here with its notebook. You rarely edit this table directly.
+
+  - key: table:sql_workbench_notebook_version;slot:help
+    summary: "Automatic history of each notebook: one version per saved change, newest kept."
+    content: |
+      **How rows get created:** by the workbench, never by hand. Every save of a notebook writes a version, and the oldest are pruned beyond notebookVersionRetention (100 per notebook by default). Use Restore Version to bring an old one back as a new version.
+
+  - key: table:sql_workbench_notebook_share;slot:help
+    summary: "Who a notebook is shared with: a user, a group, or everyone, and whether they can edit."
+    content: |
+      **How rows get created:** use Share Notebook on a notebook you own. Each share adds a row for the user, group or everyone. Notebooks are private until shared.
+
+  - key: table:sql_workbench_result_snapshot;slot:help
+    summary: "Result tables you pinned to a notebook so the data is kept with it."
+    content: |
+      **How rows get created:** run a query in the Runner and pin its result to the notebook (Snapshot). The snapshot keeps the audited SQL and up to snapshotMaxRows rows. It stays empty until someone pins a result.
+
+  - key: table:sql_workbench_execution;slot:help
+    summary: "The audit of every statement run: who, where, the SQL, the outcome and how long it took."
+    content: |
+      **How rows get created:** by the workbench itself, before each run, including rejected requests; nobody can add, edit or delete rows. It stays empty until someone runs a query. Set auditRetentionDays in the qbit config to delete rows older than that many days (the default keeps them forever).

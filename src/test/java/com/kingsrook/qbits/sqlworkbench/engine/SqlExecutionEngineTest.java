@@ -491,6 +491,99 @@ class SqlExecutionEngineTest extends BaseSqlWorkbenchTest
 
 
    /*******************************************************************************
+    ** auditRetentionDays deletes audit rows older than the window, in the
+    ** background, and only those: a 40-day-old RUNNING row survives. The default
+    ** keeps everything, and a process does not prune the moment it starts.
+    *******************************************************************************/
+   @Test
+   void testAuditRetentionPrunesOldRows() throws Exception
+   {
+      ExecutionAuditor auditor = new ExecutionAuditor(config);
+      java.time.Instant old    = java.time.Instant.now().minus(java.time.Duration.ofDays(40));
+      for(String[] row : new String[][] { { "a1", "REJECTED" }, { "a2", "REJECTED" }, { "r1", "RUNNING" } })
+      {
+         auditor.record(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000" + row[0]).withUserId(READER).withBackendName(BACKEND_NAME)
+            .withMode(ExecutionMode.READ_ONLY.name()).withStatus(row[1]).withSqlText("SELECT 1").withStartTime(old));
+      }
+      assertThat(audits()).hasSize(3);
+
+      ////////////////////////////////////////////////////////////
+      // default (null): nothing is ever pruned                  //
+      ////////////////////////////////////////////////////////////
+      run("SELECT 1", Map.of(), READER);
+      auditor.allowPruneNow();
+      assertThat(auditor.pruneIfDue()).isNull();
+      assertThat(audits()).hasSize(4);
+
+      ////////////////////////////////////////////////////////////////////
+      // 30 days: a fresh auditor waits out its start-up delay           //
+      ////////////////////////////////////////////////////////////////////
+      config.setAuditRetentionDays(30);
+      ExecutionAuditor pruning = new ExecutionAuditor(config);
+      assertThat(pruning.pruneIfDue()).as("no pass right after start-up").isNull();
+
+      pruning.allowPruneNow();
+      pruning.pruneIfDue().get();
+      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid)
+         .doesNotContain("00000000-0000-0000-0000-0000000000a1", "00000000-0000-0000-0000-0000000000a2")
+         .contains("00000000-0000-0000-0000-0000000000r1");
+      assertThat(audits()).as("the old RUNNING row and the fresh run").hasSize(2);
+      assertThat(pruning.pruneIfDue()).as("at most hourly").isNull();
+      assertThat(pruning.pruneOlderThan(java.time.Instant.now().minus(java.time.Duration.ofDays(30)))).as("RUNNING rows are never deleted").isZero();
+
+      ////////////////////////////////////////////////////////////////////////////
+      // the pass that start() triggers runs in the background and spares RUNNING //
+      ////////////////////////////////////////////////////////////////////////////
+      auditor.record(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000a3").withUserId(READER).withBackendName(BACKEND_NAME)
+         .withMode(ExecutionMode.READ_ONLY.name()).withStatus(ExecutionStatus.REJECTED.name()).withSqlText("SELECT 1").withStartTime(old));
+      pruning.allowPruneNow();
+      pruning.start(new SqlWorkbenchExecution().withExecutionUuid("00000000-0000-0000-0000-0000000000b1").withUserId(READER).withBackendName(BACKEND_NAME)
+         .withMode(ExecutionMode.READ_ONLY.name()).withSqlText("SELECT 2").withStartTime(java.time.Instant.now()));
+      for(int i = 0; i < 100 && audits().stream().anyMatch(a -> a.getExecutionUuid().endsWith("a3")); i++)
+      {
+         Thread.sleep(50);
+      }
+      assertThat(audits()).extracting(SqlWorkbenchExecution::getExecutionUuid).doesNotContain("00000000-0000-0000-0000-0000000000a3")
+         .contains("00000000-0000-0000-0000-0000000000r1");
+   }
+
+
+
+   /*******************************************************************************
+    ** A backlog bigger than one batch is deleted in bounded batches.
+    *******************************************************************************/
+   @Test
+   void testAuditRetentionDeletesInBatches() throws Exception
+   {
+      config.setAuditRetentionDays(30);
+      ExecutionAuditor auditor = new ExecutionAuditor(config);
+      java.time.Instant old = java.time.Instant.now().minus(java.time.Duration.ofDays(40));
+      int total = ExecutionAuditor.BATCH_SIZE + 5;
+      for(int i = 0; i < total; i++)
+      {
+         auditor.record(new SqlWorkbenchExecution().withExecutionUuid(java.util.UUID.randomUUID().toString()).withUserId(READER).withBackendName(BACKEND_NAME)
+            .withMode(ExecutionMode.READ_ONLY.name()).withStatus(ExecutionStatus.REJECTED.name()).withSqlText("SELECT 1").withStartTime(old));
+      }
+      assertThat(auditor.pruneOlderThan(java.time.Instant.now().minus(java.time.Duration.ofDays(30)))).isEqualTo(total);
+      assertThat(audits()).isEmpty();
+   }
+
+
+
+   /*******************************************************************************
+    ** auditRetentionDays must be positive when set.
+    *******************************************************************************/
+   @Test
+   void testAuditRetentionValidation()
+   {
+      java.util.List<String> errors = new java.util.ArrayList<>();
+      new com.kingsrook.qbits.sqlworkbench.SqlWorkbenchQBitConfig().withBackendName(BACKEND_NAME).withAuditRetentionDays(0).validate(null, errors);
+      assertThat(errors).anyMatch(e -> e.contains("auditRetentionDays"));
+   }
+
+
+
+   /*******************************************************************************
     ** A connection that cannot be opened answers with a generic message: the
     ** driver's (URL, host, user) stays in the server log.
     *******************************************************************************/
