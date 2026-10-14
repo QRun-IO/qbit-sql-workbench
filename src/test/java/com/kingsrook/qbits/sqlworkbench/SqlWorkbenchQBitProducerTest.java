@@ -47,7 +47,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.processes.QProcessMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qqq.backend.core.modules.backend.implementations.memory.MemoryBackendModule;
 import com.kingsrook.qqq.backend.module.rdbms.model.metadata.RDBMSTableBackendDetails;
-import com.kingsrook.qqq.middleware.javalin.QJavalinMetaData;
+import com.kingsrook.qqq.middleware.javalin.specs.extensions.MiddlewareSpecExtensionsMetaData;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -137,7 +137,7 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       assertThat(runner.getPermissionRules().getPermissionBaseName()).isEqualTo("sql_workbench");
       assertThat(app.getChildren()).noneMatch(child -> child instanceof QProcessMetaData);
 
-      assertThat(QJavalinMetaData.of(qInstance).getAdditionalRouteProviderReferences()).isNotEmpty();
+      assertThat(MiddlewareSpecExtensionsMetaData.ofOrWithNew(qInstance).getExtensions()).isNotEmpty();
       assertThat(SqlWorkbenchRuntime.get(qInstance)).isNotNull();
       assertThat(new SqlWorkbenchWidgetRenderer().render(null).getWidgetData().getType()).isEqualTo("SQL_WORKBENCH");
       assertThat(SqlWorkbenchQBitProducer.getVersion()).isNotBlank();
@@ -164,7 +164,7 @@ class SqlWorkbenchQBitProducerTest extends BaseSqlWorkbenchTest
       assertThat(instance.getPossibleValueSource("ns_sql_workbench_backend")).isNotNull();
       assertThat(instance.getTable("ns_sql_workbench_cell").getField("cellType").getPossibleValueSourceName()).isEqualTo("ns_sql_workbench_cell_type");
       assertThat(instance.getPossibleValueSource("ns_sql_workbench_cell_type")).isNotNull();
-      assertThat(QJavalinMetaData.of(instance)).isNull();
+      assertThat(MiddlewareSpecExtensionsMetaData.of(instance)).isNull();
 
       SqlWorkbenchRuntime first = prefixed.getRuntime();
       new SqlWorkbenchQBitProducer().withQBitConfig(prefixed).getQBitMetaData();

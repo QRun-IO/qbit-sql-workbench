@@ -16,7 +16,7 @@ The full design (architecture, data model, security model, limits, API contract,
 
 ## Requirements
 
-- Java 21 and QQQ 4.1 (built against `4.1.0-RC.4`, which is required: it lets partial edits of child rows pass joined record locks, [qqq#1073](https://github.com/QRun-IO/qqq/issues/1073)).
+- Java 21 and QQQ `4.1.0-RC.6` or later (the UI API extension contract, qqq#1128).
 - `qqq-backend-module-rdbms` for the targets. `qqq-middleware-javalin` for the REST routes; it is optional, and without it the engine still works but no routes are registered.
 - A Next UI release that renders the `SQL_WORKBENCH` widget.
 
@@ -51,7 +51,7 @@ The producer adds the following to the instance:
 - **The `sqlWorkbenchWidget` widget** (type `SQL_WORKBENCH`): the notebook editor.
 - **The home dashboard widgets** ([App home](#app-home)).
 - **The `sqlWorkbench` app.** Its home page is the dashboard. Its nav lists the **Runner** (`sqlWorkbenchRunner`, a child app whose page is the `SQL_WORKBENCH` widget), then the main tables: Notebooks (`sql_workbench_notebook`) and the execution audit (`sql_workbench_execution`). Cells, versions, pinned results and shares are not in the nav; they are child lists on a notebook.
-- **The `/qqq/v1/sql-workbench/*` routes**, registered through `QJavalinMetaData`, as `qqq-esb` does.
+- **All 21 `/qqq/v1/sql-workbench/*` operations**, registered as the `sql-workbench` UI API extension. The producer preserves the established prefix; strict UI API route checking is supported. The generated [OpenAPI fragment](src/main/resources/openapi/qqq-v1/sql-workbench.yaml) covers JSON and streaming exports. See [the contract and operation catalog](docs/UI-API.md).
 
 To move the app under another app (for example an Admin app), re-parent `SqlWorkbenchQBitProducer.APP_NAME` after producing; the Runner moves with it. Open a notebook in the Runner with `/app/sqlWorkbenchRunner?notebook=<id>`.
 
@@ -231,7 +231,7 @@ A checklist for adding the workbench to a QQQ application. Each row points to th
 | Item | What to do |
 |---|---|
 | Coordinates | `com.kingsrook.qbits:qbit-sql-workbench`. Current release candidate: `1.0.0-RC.2` (Maven Central, published from `release/1.0`). |
-| QQQ version | QQQ 4.1, `4.1.0-RC.4` or later (qqq#1073: partial edits of child rows under joined locks). Java 21. |
+| QQQ version | QQQ `4.1.0-RC.6` or later (qqq#1128: UI API extension specs). Java 21. |
 | Dependencies | `qqq-backend-module-rdbms` comes in transitively. Add `qqq-middleware-javalin` yourself for the REST routes; it is optional in this qbit's POM, and without it no routes are registered. |
 | Frontend | A Next UI (`qqq-frontend-next`) release that renders the `SQL_WORKBENCH` widget: `v1.0.0-RC.13` or later. Other frontends show the app and tables but not the notebook. |
 | Registration | `new SqlWorkbenchQBitProducer().withQBitConfig(config).produce(qInstance)` after your backends are in the instance. The producer registers its own QBit metadata; don't add it by hand. To nest the app (for example under Admin), re-parent `SqlWorkbenchQBitProducer.APP_NAME` after producing. |
