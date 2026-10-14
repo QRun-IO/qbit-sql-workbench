@@ -42,7 +42,7 @@ import static com.kingsrook.qqq.backend.core.logging.LogUtils.logPair;
  ** SQL_WORKBENCH widget, sqlWorkbench app), applies the config's table
  ** customizer and default backend, stamps sourceQBitName, then calls
  ** {@link #postProduceActions}, which builds the runtime and registers the
- ** /qqq/v1/sql-workbench Javalin routes.
+ ** /qqq/v1/sql-workbench UI API extension.
  **
  ** Host usage:
  **   new SqlWorkbenchQBitProducer().withQBitConfig(config).produce(qInstance);
@@ -188,7 +188,7 @@ public class SqlWorkbenchQBitProducer implements QBitMetaDataProducer<SqlWorkben
 
 
    /*******************************************************************************
-    ** Build the runtime and register the REST routes.
+    ** Build the runtime and register the UI API extension.
     *******************************************************************************/
    @Override
    public void postProduceActions(MetaDataProducerMultiOutput output, QInstance qInstance) throws QException
@@ -203,7 +203,7 @@ public class SqlWorkbenchQBitProducer implements QBitMetaDataProducer<SqlWorkben
       boolean routes = false;
       if(Boolean.TRUE.equals(qBitConfig.getRegisterRoutes()) && isJavalinAvailable())
       {
-         com.kingsrook.qbits.sqlworkbench.api.SqlWorkbenchRoutes.register(qInstance);
+         com.kingsrook.qbits.sqlworkbench.api.SqlWorkbenchEndpoints.register(qInstance);
          routes = true;
       }
 

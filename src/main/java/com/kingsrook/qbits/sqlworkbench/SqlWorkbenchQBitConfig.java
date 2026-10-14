@@ -71,23 +71,23 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    public static final String ALL_ACCESS_SECURITY_KEY_NAME    = "sql_workbench_all_access";
 
    ///////////////////////////////////////////////////////////////////////////
-   // names before 1.0.0-RC.3, when the owner rule (lowercase snake_case,   //
+   // names before 1.0.0-RC.4, when the owner rule (lowercase snake_case,   //
    // prefixed with the qbit name) was applied; kept only so hosts can      //
    // migrate stored references (see UPGRADE.md)                            //
    ///////////////////////////////////////////////////////////////////////////
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_ACCESS_PERMISSION_BASE_NAME = "sqlWorkbench";
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_WRITE_PERMISSION_NAME = "sqlWorkbench.write";
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_SHARE_PERMISSION_NAME = "sqlWorkbench.share";
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_ADMIN_PERMISSION_BASE_NAME = "sqlWorkbenchAdmin";
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_USER_SECURITY_KEY_TYPE_NAME = "sqlWorkbenchUser";
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_AUDIENCE_SECURITY_KEY_TYPE_NAME = "sqlWorkbenchAudience";
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_ALL_ACCESS_SECURITY_KEY_NAME = "sqlWorkbenchAllAccess";
 
    private String backendName;

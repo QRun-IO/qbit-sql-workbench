@@ -33,9 +33,9 @@ public enum ShareAudienceType implements PossibleValueEnum<String>
    public static final String NAME = "sql_workbench_share_audience_type";
 
    /*******************************************************************************
-    ** The possible-value source name before 1.0.0-RC.3.
+    ** The possible-value source name before 1.0.0-RC.4.
     *******************************************************************************/
-   @Deprecated(since = "1.0.0-RC.3")
+   @Deprecated(since = "1.0.0-RC.4")
    public static final String LEGACY_NAME = "sqlWorkbenchShareAudienceType";
 
    private final String label;
