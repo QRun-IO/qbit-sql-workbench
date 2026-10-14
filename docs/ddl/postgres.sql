@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS sql_workbench_result_snapshot (
    CONSTRAINT pk_sql_workbench_result_snapshot PRIMARY KEY (id),
    CONSTRAINT fk_sql_workbench_result_snapshot_notebook FOREIGN KEY (notebook_id) REFERENCES sql_workbench_notebook (id)
 );
+-- the notebook page lists its snapshots, and deleting a notebook deletes them, by notebook_id
+CREATE INDEX IF NOT EXISTS ix_sql_workbench_result_snapshot_notebook ON sql_workbench_result_snapshot (notebook_id);
 
 -- Shares (1.0.0-RC.2): who, besides the owner, may read a notebook.
 -- audience_key is "user:<id>", "group:<name>" or "all" (the shared library);
@@ -133,3 +135,5 @@ CREATE TABLE IF NOT EXISTS sql_workbench_execution (
 );
 CREATE INDEX IF NOT EXISTS ix_sql_workbench_execution_user ON sql_workbench_execution (user_id, id);
 CREATE INDEX IF NOT EXISTS ix_sql_workbench_execution_start ON sql_workbench_execution (start_time);
+-- the notebook page's "Runs" list joins executions by notebook_id
+CREATE INDEX IF NOT EXISTS ix_sql_workbench_execution_notebook ON sql_workbench_execution (notebook_id);
