@@ -42,7 +42,7 @@ SQL Workbench is a super-user SQL notebook for any QQQ application. Users write 
  │  └ WidgetRenderer                │◄───────────────►│  /qqq/v1/metaData  (app + widget, filtered │
  │     case 'SQL_WORKBENCH'         │                 │                    by sql_workbench.hasAccess)│
  │      └ SqlWorkbenchWidget (lazy) │                 │                                            │
- │         ├ NotebookList           │  /qqq/v1/       │ SqlWorkbenchRouteProvider                  │
+ │         ├ NotebookList           │  /qqq/v1/       │ SQL Workbench endpoint specs               │
  │         ├ NotebookEditor         │  sql-workbench/*│  └ SqlWorkbenchApi (session, perms, JSON)  │
  │         │  ├ SqlCell (CM6)       │◄───────────────►│     ├ SqlExecutionEngine ──► ConnectionMgr │
  │         │  ├ MarkdownCell        │                 │     │   ├ SqlClassifier / NamedParameterSql│
@@ -73,8 +73,8 @@ SQL Workbench is a super-user SQL notebook for any QQQ application. Users write 
 | `explain/*` | `ExplainService` (per-dialect EXPLAIN syntax) and `PlanParser`, which normalizes Postgres JSON, MySQL JSON, SQLite `EXPLAIN QUERY PLAN` rows, and H2 text into one `PlanNode` tree. |
 | `notebook/NotebookService` | Notebook CRUD, visibility, versions, and snapshots through QQQ actions on the qbit tables. |
 | `api/SqlWorkbenchApi` | Transport-agnostic API: map in, map out. Checks permissions and throws QQQ exceptions. Unit-testable without HTTP. |
-| `api/SqlWorkbenchRouteProvider` | `QJavalinRouteProviderInterface`. Sets up the session (`ExecutorSessionUtils.setupSession`), calls the API, writes JSON, and maps errors through `QJavalinUtils.handleException`. Clears the context in `finally`. |
-| `api/SqlWorkbenchJavalinMetaDataProducer` | Adds the route provider to `QJavalinMetaData` once (the ESB pattern). Called from `postProduceActions` when the class is loadable. |
+| `api/SqlWorkbenchEndpoints` and `*Spec` | One `MiddlewareSpecExtension`, `sql-workbench`, at `/sql-workbench`. Twenty JSON specs extend `AbstractJsonEndpointSpec`; export extends `AbstractEndpointSpec` directly. Core sets up and clears the session. The shared JSON transport checks access before parsing and keeps exact decimal parameters and 409 duplicate-execution errors. Existing services retain permission checks, limits and audit. See [UI API contract](UI-API.md). |
+| `api/SqlWorkbenchSchemas` | Versioned request and response component schemas, declared once by the capabilities spec for the complete extension. The committed fragment is checked by `SqlWorkbenchApiContractTest`. |
 
 ### 2.2 Frontend (Next UI)
 

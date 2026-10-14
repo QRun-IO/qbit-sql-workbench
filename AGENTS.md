@@ -24,7 +24,7 @@ How tests are split:
 
 **Entry point:** `SqlWorkbenchQBitProducer implements QBitMetaDataProducer<SqlWorkbenchQBitConfig>`.
 - Component producers are found in the `metadata` package only (`getPackageNameForFindingMetaDataProducers`), because `api` needs the optional Javalin dependency.
-- `postProduceActions` builds `SqlWorkbenchRuntime` and calls `api.SqlWorkbenchRoutes.register` when Javalin is on the classpath.
+- `postProduceActions` builds `SqlWorkbenchRuntime` and calls `api.SqlWorkbenchEndpoints.register` when Javalin is on the classpath.
 
 **Packages:**
 - `sql/`: `SqlScanner` (dialect-aware lexer), `SqlClassifier` (split, then classify as READ, EXPLAIN_ANALYZE, WRITE, DDL, or FORBIDDEN), `NamedParameterSql` (`:name` → `?`). Pure Java.
@@ -38,7 +38,7 @@ How tests are split:
 - `explain/`: `PlanParser` (Postgres JSON, MySQL JSON/text, SQLite rows, text) and `PlanNode`.
 - `schema/`: `SchemaIntrospector` (JDBC `DatabaseMetaData` plus the QQQ table and field to SQL name mapping), cached in the runtime.
 - `notebook/`: `NotebookService` (CRUD, sharing, versions in one transaction, snapshots), run as the caller's session through the standard table actions; `NotebookVersioning` (one version per change, as the system user).
-- `api/`: `SqlWorkbenchApi` (transport-agnostic, permission checks), `SqlWorkbenchRouteProvider` (Javalin 7 routes under `/qqq/v1/sql-workbench`), `ResultExporter` (CSV/JSON/XLSX via fastexcel), and `SqlWorkbenchRoutes`.
+- `api/`: `SqlWorkbenchApi` (transport-agnostic, permission checks), `SqlWorkbenchJsonSpec` and concrete endpoint specs (the UI API extension under `/qqq/v1/sql-workbench`), `ResultExporter` (CSV/JSON/XLSX via fastexcel), and `SqlWorkbenchEndpoints`.
 - `metadata/`: the 6 tables (record locks, joins, child-list widgets), the security key types, the PVSs, the record actions, the `SQL_WORKBENCH` widget and its renderer, the home dashboard widgets, the Runner child app, and the `sqlWorkbench` app (nav: Runner, then the main tables only).
 - `home/`: the dashboard data (`SqlWorkbenchHome`, read through core actions in the viewer's session so locks apply), its renderer, and inline-styled HTML helpers.
 - `SqlWorkbenchIntegrations`: opt-in ESB and Quick Search hooks for the main tables.
@@ -65,7 +65,7 @@ How tests are split:
 ## Dependencies
 
 - Java 21.
-- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.4` ahead of it (RC.4 brings the record developer panel contract), as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
+- Parent `com.kingsrook:qbit-build-parent:2.0.0` (qqq 4.0.0). The default-active `qqq-snapshot` profile imports `qqq-bom-pom:4.1.0-RC.6` ahead of it (RC.6 brings the UI API extension contract), as in qbit-quick-search (ADR-0007). Remove that activation when the parent moves to 4.1.
 - `qqq-backend-core`, `qqq-backend-module-rdbms`, and `qqq-middleware-javalin` (optional).
 - Tests: JUnit 5, AssertJ, Mockito, H2, `qqq-backend-module-sqlite`/`-postgres` (drivers), Testcontainers 1.21.4.
 
