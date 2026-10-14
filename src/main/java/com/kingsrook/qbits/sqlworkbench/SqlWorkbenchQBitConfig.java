@@ -122,6 +122,7 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
    private Integer maxSchemaTables = 2000;
    private Integer snapshotMaxRows = 1000;
    private Integer notebookVersionRetention = 100;
+   private Integer auditRetentionDays = null;
    private Boolean registerRoutes = true;
 
    private transient MetaDataCustomizerInterface<QTableMetaData> tableMetaDataCustomizer;
@@ -215,6 +216,10 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
       requirePositive(errors, "maxSchemaTables", maxSchemaTables);
       requirePositive(errors, "snapshotMaxRows", snapshotMaxRows);
       requirePositive(errors, "notebookVersionRetention", notebookVersionRetention);
+      if(auditRetentionDays != null)
+      {
+         requirePositive(errors, "auditRetentionDays", auditRetentionDays);
+      }
 
       if(defaultPageSize != null && maxPageSize != null && defaultPageSize > maxPageSize)
       {
@@ -1478,6 +1483,39 @@ public class SqlWorkbenchQBitConfig implements QBitConfig
       this.notebookVersionRetention = notebookVersionRetention;
       return (this);
    }
+
+
+   /*******************************************************************************
+    ** Getter for auditRetentionDays: execution audit rows older than this many
+    ** days are deleted (at most once an hour, when a run is audited); null (the
+    ** default) keeps them forever.
+    *******************************************************************************/
+   public Integer getAuditRetentionDays()
+   {
+      return (this.auditRetentionDays);
+   }
+
+
+
+   /*******************************************************************************
+    ** Setter for auditRetentionDays
+    *******************************************************************************/
+   public void setAuditRetentionDays(Integer auditRetentionDays)
+   {
+      this.auditRetentionDays = auditRetentionDays;
+   }
+
+
+
+   /*******************************************************************************
+    ** Fluent setter for auditRetentionDays
+    *******************************************************************************/
+   public SqlWorkbenchQBitConfig withAuditRetentionDays(Integer auditRetentionDays)
+   {
+      this.auditRetentionDays = auditRetentionDays;
+      return (this);
+   }
+
 
 
    /*******************************************************************************

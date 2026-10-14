@@ -28,6 +28,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaDataProducer;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
+import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchHelp;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchAppMetaDataProducer;
 import com.kingsrook.qbits.sqlworkbench.metadata.SqlWorkbenchTableMetaDataHelper;
 import static com.kingsrook.qqq.backend.core.logging.LogUtils.logPair;
@@ -182,6 +183,11 @@ public class SqlWorkbenchQBitProducer implements QBitMetaDataProducer<SqlWorkben
 
       MetaDataProducerMultiOutput output = QBitMetaDataProducer.super.produce(qInstance);
       output.addSelfToInstance(qInstance);
+
+      /////////////////////////////////////////////////////////////////////////
+      // after the tables and app are in the instance: fill their empty help //
+      /////////////////////////////////////////////////////////////////////////
+      SqlWorkbenchHelp.apply(qInstance, qBitConfig);
       return (new MetaDataProducerMultiOutput());
    }
 
