@@ -33,15 +33,15 @@ import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 
 
 /*******************************************************************************
- ** Applies help/sql-workbench.yaml (the QQQ help-bundle format) to the SQL
+ ** Applies help/qbit-sql-workbench.yaml (the QQQ help-bundle format) to the SQL
  ** Workbench app and its sql_workbench_* tables: what each table is for and
  ** how its rows get created, shown on the table screen and when it is empty.
- ** STAND-IN(core=QRun-IO/qqq#1198, removeBy=4.1.0-RC.9): replace with HelpBundles.register once the pinned QQQ
- ** release includes it; the bundle file stays the same.
+ ** Retains inline app/table help for hosts without helpContent, including
+ ** prefixed metadata. Core bundle registration supplies the full help catalog.
  *******************************************************************************/
 public final class SqlWorkbenchHelp
 {
-   public static final String RESOURCE = "/help/sql-workbench.yaml";
+   public static final String RESOURCE = "/help/qbit-sql-workbench.yaml";
    public static final String SLOT     = "help";
 
 
@@ -67,7 +67,7 @@ public final class SqlWorkbenchHelp
             throw (new IOException("missing resource"));
          }
          JsonNode bundle = new ObjectMapper(new YAMLFactory()).readTree(stream);
-         if(!"sql-workbench".equals(bundle.path("bundle").asText()) || !"QBIT".equals(bundle.path("layer").asText()))
+         if(!"qbit-sql-workbench".equals(bundle.path("bundle").asText()) || !"QBIT".equals(bundle.path("layer").asText()))
          {
             throw (new IOException("invalid bundle header"));
          }
@@ -76,7 +76,7 @@ public final class SqlWorkbenchHelp
          {
             String key     = entry.path("key").asText();
             String summary = entry.path("summary").asText();
-            if(key.isBlank() || summary.isBlank() || summary.length() > 120 || entry.path("content").asText().isBlank() || entries.put(key, entry) != null)
+            if(key.isBlank() || summary.isBlank() || summary.length() > 120 || entries.put(key, entry) != null)
             {
                throw (new IOException("invalid or duplicate entry: " + key));
             }
@@ -101,6 +101,10 @@ public final class SqlWorkbenchHelp
       for(Map.Entry<String, JsonNode> entry : entries().entrySet())
       {
          String key  = entry.getKey();
+         if(!key.endsWith(";slot:help"))
+         {
+            continue;
+         }
          String name = key.substring(key.indexOf(':') + 1, key.indexOf(';'));
          if(key.startsWith("table:"))
          {

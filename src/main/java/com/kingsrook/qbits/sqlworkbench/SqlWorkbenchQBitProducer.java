@@ -25,6 +25,7 @@ import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerMultiOutput;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
+import com.kingsrook.qqq.backend.core.model.metadata.help.bundles.HelpBundles;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.qbits.QBitMetaDataProducer;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
@@ -188,6 +189,9 @@ public class SqlWorkbenchQBitProducer implements QBitMetaDataProducer<SqlWorkben
       // after the tables and app are in the instance: fill their empty help //
       /////////////////////////////////////////////////////////////////////////
       SqlWorkbenchHelp.apply(qInstance, qBitConfig);
+
+      // Registration is metadata-only; core guards startup sync when helpContent is absent.
+      HelpBundles.register(qInstance, "help/qbit-sql-workbench.yaml");
       return (new MetaDataProducerMultiOutput());
    }
 
