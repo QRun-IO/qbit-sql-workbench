@@ -1,0 +1,421 @@
+bundle: qbit-sql-workbench
+version: ${project.version}
+layer: QBIT
+entries:
+- key: app:sqlWorkbench;slot:help
+  summary: 'A SQL notebook for your databases: write queries, run them read-only, and review every run afterwards.'
+  content: |
+    The home page is a dashboard of your notebooks and recent runs (admins see everyone's). Use **{{label:sqlWorkbenchRunner}}** to write and run SQL, **{{label:sql_workbench_notebook}}** to manage saved notebooks, and **{{label:sql_workbench_execution}}** to see who ran what.
+
+    **Safe by default.** Runs are read-only and one statement at a time. Writing to the database needs write mode enabled by your administrator, the separate write permission and two steps: a dry run that is rolled back, then a confirmation.
+
+    **Who sees what.** You see your own notebooks, notebooks shared with you, and your own runs. Administrators see everything.
+
+    Raw SQL bypasses normal application record rules, history and search updates. Use application processes for business changes. Every run is recorded in the execution audit.
+- key: app:sqlWorkbenchRunner;slot:help
+  summary: 'The notebook editor: write SQL and notes in cells, run them, and see results, charts and query plans.'
+  content: |
+    Open a notebook from **{{label:sql_workbench_notebook}}** (the **Open in Runner** link) or start a new one here.
+
+    - A notebook is a list of cells. A SQL cell holds a query, a Markdown cell holds notes.
+    - Each SQL cell runs against one database; read-only is the default.
+    - Named parameters written as :name in the SQL are always bound as values, never pasted into the text.
+    - Saving creates a new version. Results can be pinned as snapshots and exported.
+
+    Only one statement runs per cell in read-only mode, and your administrator sets the limit on simultaneous runs.
+- key: table:sql_workbench_notebook;slot:help
+  summary: 'A saved SQL notebook: its title, default database, parameters and cells, owned by one person.'
+  content: |
+    **How rows get created:** You create a notebook in the Runner or with New here. It starts with your own content.
+
+    Notebooks are personal until the owner shares them. You can read your own notebooks and ones shared with you; only the owner (or an administrator) can edit or delete one.
+
+    The record view lists the notebook's **Cells**, **Shares**, **Snapshots (pinned results)**, **Versions** and **Runs**, and has an **Open in Runner** link. Actions: **{{label:sqlWorkbenchShareNotebook}}** and **{{label:sqlWorkbenchDuplicateNotebook}}**.
+
+    Creating a notebook here makes you the owner and saves version 1. Deleting a notebook also deletes its cells, versions, pinned results and shares. Past runs stay in **{{label:sql_workbench_execution}}**.
+- key: table:sql_workbench_notebook;section:identity
+  summary: The notebook's title, description, owner and who can read it.
+- key: table:sql_workbench_notebook;section:runner
+  summary: A button to open this notebook in the Runner editor.
+- key: table:sql_workbench_notebook;section:details
+  summary: The default database and the named parameters the notebook's SQL can use.
+- key: table:sql_workbench_notebook;section:sql_workbench_notebook_join_sql_workbench_cell
+  summary: The SQL and Markdown cells of this notebook, in order.
+- key: table:sql_workbench_notebook;section:sql_workbench_notebook_join_sql_workbench_notebook_share
+  summary: Who this notebook is shared with, read-only.
+- key: table:sql_workbench_notebook;section:sql_workbench_notebook_join_sql_workbench_result_snapshot
+  summary: Query results pinned from this notebook so they stay viewable later.
+- key: table:sql_workbench_notebook;section:sql_workbench_notebook_join_sql_workbench_notebook_version
+  summary: The saved history of this notebook, newest first (the latest 25 are shown).
+- key: table:sql_workbench_notebook;section:sql_workbench_notebook_join_sql_workbench_execution
+  summary: The most recent runs of this notebook (latest 25), taken from the execution audit.
+- key: table:sql_workbench_notebook;section:system
+  summary: Owner id, current version number and created and changed dates, all filled in automatically.
+- key: table:sql_workbench_notebook;field:title
+  summary: The name shown in the notebook list and the Runner.
+  content: |
+    Required. Surrounding spaces are removed and it cannot be blank. Up to {{maxLength:sql_workbench_notebook.title}} characters.
+- key: table:sql_workbench_notebook;field:description
+  summary: A short note about what the notebook is for.
+- key: table:sql_workbench_notebook;field:defaultBackendName
+  summary: The database new SQL cells run against unless a cell picks its own.
+  content: |
+    Leave it blank to choose per cell. Your administrator controls which databases are available.
+- key: table:sql_workbench_notebook;field:parametersJson
+  summary: Named parameters for the SQL, as a JSON list with a name, type, default value and label for each.
+  content: |
+    Reference a parameter in SQL as :name. Values are always bound safely, never pasted into the statement. The Runner has a parameters panel that edits this for you; if you type it by hand it must be a valid JSON list or the save is refused.
+- key: table:sql_workbench_notebook;field:ownerUserId
+  summary: The sign-in id of the owner, set automatically from whoever created the notebook.
+  content: |
+    Only an administrator can change it, which transfers the notebook to someone else (the owner name then follows the new id).
+- key: table:sql_workbench_notebook;field:ownerName
+  summary: The owner's display name, copied from their account when the notebook was created.
+- key: table:sql_workbench_notebook;field:currentVersion
+  summary: The number of the newest saved version, increased by every save.
+- key: table:sql_workbench_notebook;field:visibility
+  summary: Whether the notebook is in the shared library or limited to its owner, administrators and other share audiences.
+  content: |
+    - **PERSONAL**: not published to everyone.
+    - **SHARED**: shared with Everyone (the shared library).
+
+    You cannot edit this directly. It follows the notebook's shares: add an Everyone share to publish it, remove that share to make it personal again.
+- key: table:sql_workbench_notebook_share;slot:help
+  summary: One person, group or everyone who may read a notebook, read-only.
+  content: |
+    **How rows get created:** You use Share Notebook or add a share from the notebook's Shares list.
+
+    A share never lets anyone edit the notebook; it only lets them open and run it. Add one from a notebook's **Shares** list or with the **{{label:sqlWorkbenchShareNotebook}}** action. You need the share permission, and only the notebook's owner or an administrator can add or remove shares.
+
+    Share with Everyone to make the notebook available in the shared library.
+- key: table:sql_workbench_notebook_share;section:identity
+  summary: The notebook and who it is shared with.
+- key: table:sql_workbench_notebook_share;section:system
+  summary: The matching key, who added the share and when, all filled in automatically.
+- key: table:sql_workbench_notebook_share;field:audienceType
+  summary: Whether the share goes to one person, a group, or everyone.
+  content: |
+    - **User**: one person, named in User or Group.
+    - **Group**: a sign-in group, named in User or Group.
+    - **Everyone (shared library)**: all workbench users; no name needed. This publishes the notebook to the shared library.
+- key: table:sql_workbench_notebook_share;field:audienceId
+  summary: The user id or group name to share with; leave blank for Everyone.
+  content: |
+    Required for User and Group shares. Matching ignores upper and lower case and surrounding spaces, so Admins and admins are the same group.
+- key: table:sql_workbench_notebook_share;field:notebookId
+  summary: The notebook being shared. It cannot be moved to another notebook after the share is created.
+- key: table:sql_workbench_notebook_share;field:audienceKey
+  summary: The normalized form of the audience, such as user:name, group:name or all, used for access checks.
+  content: |
+    Filled in automatically from the type and name.
+- key: table:sql_workbench_notebook_share;field:createdByUserId
+  summary: The sign-in id of the person who added the share, set automatically.
+- key: table:sql_workbench_notebook_share;field:createdByName
+  summary: The display name of the person who added the share, set automatically.
+- key: table:sql_workbench_cell;slot:help
+  summary: 'One block of a notebook: a SQL query or a Markdown note.'
+  content: |
+    **How rows get created:** You add SQL or Markdown cells to a notebook in the Runner or from its Cells list.
+
+    Cells are normally edited in the Runner, but you can add, edit, reorder and delete them here. A notebook can hold at most 200 cells, and your administrator sets the SQL length limit.
+
+    Every add, edit or delete saves a new notebook version, just like saving in the Runner. A new cell is added at the end with a generated key. Only the notebook's owner or an administrator can change cells.
+- key: table:sql_workbench_cell;section:identity
+  summary: Which notebook the cell belongs to, its position, type and title.
+- key: table:sql_workbench_cell;section:content
+  summary: The SQL or Markdown text and the database the cell runs against.
+- key: table:sql_workbench_cell;section:system
+  summary: The cell's generated key and created and changed dates, filled in automatically.
+- key: table:sql_workbench_cell;field:notebookId
+  summary: The notebook this cell belongs to. A cell cannot be moved to a different notebook.
+- key: table:sql_workbench_cell;field:cellKey
+  summary: A generated unique key that stays with the cell. Pinned results and run history refer to it.
+  content: |
+    Set automatically when the cell is created and it cannot be changed.
+- key: table:sql_workbench_cell;field:sortOrder
+  summary: The cell's position in the notebook, lowest first.
+  content: |
+    Left blank on a new cell it is placed at the end. Change the numbers to reorder cells.
+- key: table:sql_workbench_cell;field:cellType
+  summary: Whether the cell is runnable SQL or a Markdown note.
+  content: |
+    - **SQL**: a query that you can run. Default: {{default:sql_workbench_cell.cellType}}.
+    - **Markdown**: formatted notes that are displayed, never run.
+- key: table:sql_workbench_cell;field:title
+  summary: "An optional heading for the cell."
+  content: |
+    Give the cell an optional heading of up to {{maxLength:sql_workbench_cell.title}} characters.
+- key: table:sql_workbench_cell;field:content
+  summary: The SQL text or Markdown. SQL can use :name parameters defined on the notebook.
+  content: |
+    Your administrator sets the maximum SQL length.
+- key: table:sql_workbench_cell;field:backendName
+  summary: The database this SQL cell runs against; blank uses the notebook's default.
+- key: table:sql_workbench_notebook_version;slot:help
+  summary: 'A read-only history entry: the full content of a notebook as it was at one save.'
+  content: |
+    **How rows get created:** The workbench saves a version when you create or change a notebook or its cells.
+
+    A new version is written each time the notebook is saved, a cell is added, edited or removed, or an older version is restored. It holds the title, description, parameters and all cells. You cannot edit or delete versions yourself. Older versions are pruned according to your administrator's retention setting.
+
+    To go back, run **{{label:sqlWorkbenchRestoreNotebookVersion}}** on the version you want. That saves it as a new, latest version, while retained versions remain available.
+- key: table:sql_workbench_notebook_version;section:identity
+  summary: Which notebook and version number this is, and the note saved with it.
+- key: table:sql_workbench_notebook_version;section:content
+  summary: The saved notebook content as JSON.
+- key: table:sql_workbench_notebook_version;section:system
+  summary: Who saved this version and when, filled in automatically.
+- key: table:sql_workbench_notebook_version;field:notebookId
+  summary: The notebook this version belongs to.
+- key: table:sql_workbench_notebook_version;field:versionNumber
+  summary: The version's number, counting up from 1 within its notebook.
+- key: table:sql_workbench_notebook_version;field:comment
+  summary: A short note on why the version was saved, such as Created, Cell added, Cell edited or Restored version 3.
+- key: table:sql_workbench_notebook_version;field:contentJson
+  summary: The notebook's title, description, default database, parameters and every cell, saved as JSON.
+- key: table:sql_workbench_notebook_version;field:savedByUserId
+  summary: The sign-in id of the person who saved this version.
+- key: table:sql_workbench_notebook_version;field:savedByName
+  summary: The display name of the person who saved this version.
+- key: table:sql_workbench_result_snapshot;slot:help
+  summary: A query result pinned from a notebook so you can look at it later without re-running the SQL.
+  content: |
+    **How rows get created:** You run a query in the Runner and pin its result to your notebook.
+
+    Pin a result from the Runner after running a cell. A snapshot keeps the column list, rows up to the configured snapshot limit, the SQL that produced it and the database it came from. It contains real query data, so it is visible only to the notebook's readers and administrators.
+
+    You cannot add snapshots here, and the only thing you can edit is the **{{label:sql_workbench_result_snapshot.label}}**. Delete a snapshot you no longer need.
+- key: table:sql_workbench_result_snapshot;section:identity
+  summary: Which notebook and cell the result came from and its label.
+- key: table:sql_workbench_result_snapshot;section:result
+  summary: The pinned rows, the SQL and database that produced them, and whether the result was cut short.
+- key: table:sql_workbench_result_snapshot;section:system
+  summary: Who pinned the result and when, filled in automatically.
+- key: table:sql_workbench_result_snapshot;field:notebookId
+  summary: The notebook the result was pinned from.
+- key: table:sql_workbench_result_snapshot;field:cellKey
+  summary: The key of the notebook cell that produced the result.
+- key: table:sql_workbench_result_snapshot;field:label
+  summary: "A name you give the pinned result to find it again."
+  content: |
+    A name you give the pinned result to find it again. This is the only editable field. Up to {{maxLength:sql_workbench_result_snapshot.label}} characters.
+- key: table:sql_workbench_result_snapshot;field:backendName
+  summary: The database the SQL ran against, recorded when the result was pinned.
+- key: table:sql_workbench_result_snapshot;field:executionUuid
+  summary: The id of the run that produced this result; it matches a row in SQL Execution Audit.
+- key: table:sql_workbench_result_snapshot;field:sqlText
+  summary: The SQL that produced the pinned result, as it was when you pinned it.
+- key: table:sql_workbench_result_snapshot;field:resultJson
+  summary: The pinned columns and rows as JSON, up to the configured snapshot limit.
+- key: table:sql_workbench_result_snapshot;field:rowCount
+  summary: How many rows the snapshot holds.
+- key: table:sql_workbench_result_snapshot;field:truncated
+  summary: Yes when the result had more rows than could be kept, so the snapshot holds only the first part.
+- key: table:sql_workbench_result_snapshot;field:createdByUserId
+  summary: The sign-in id of the person who pinned the result.
+- key: table:sql_workbench_execution;slot:help
+  summary: 'The audit log of SQL runs: who ran what, where, how long it took and how it ended.'
+  content: |
+    **How rows get created:** The workbench records runs before executing SQL, including rejected SQL attempts.
+
+    Every run is recorded before the SQL starts, and attempts that were refused are logged too, so this is the place to answer "who changed or read this?". Rows are added and updated by the workbench only; you cannot edit or delete them. Your administrator can configure automatic removal of older completed runs.
+
+    You see your own runs; administrators see everyone's. The log keeps the SQL text and parameter values, but never the result rows.
+
+    Use the filters on **{{label:sql_workbench_execution.status}}**, **{{label:sql_workbench_execution.mode}}**, **User** and **{{label:sql_workbench_execution.startTime}}** to narrow it down, or open a run from a notebook's **Runs** list.
+- key: table:sql_workbench_execution;section:identity
+  summary: The run's id, mode, outcome and database.
+- key: table:sql_workbench_execution;section:run
+  summary: Who ran it, when, how long it took, and how many rows came back or changed.
+- key: table:sql_workbench_execution;section:sql
+  summary: The SQL text, its fingerprint, the parameter values used and any error.
+- key: table:sql_workbench_execution;section:system
+  summary: When the audit row was created, filled in automatically.
+- key: table:sql_workbench_execution;field:executionUuid
+  summary: A unique id for the run, also used to fetch its results and match pinned snapshots.
+- key: table:sql_workbench_execution;field:mode
+  summary: How the SQL was run.
+  content: |
+    - **READ_ONLY**: a normal read-only run.
+    - **WRITE_PREVIEW**: a dry run of a write, rolled back so you can see the affected-row counts.
+    - **WRITE_COMMIT**: the confirmed write, committed.
+    - **EXPLAIN**: a query plan without running the query.
+    - **EXPLAIN_ANALYZE**: a query plan that actually runs the query (needs the write permission).
+- key: table:sql_workbench_execution;field:status
+  summary: How the run ended, or Running while it is still going.
+  content: |
+    - **RUNNING**: in progress. A run that never finishes may stay here.
+    - **SUCCEEDED**: finished normally.
+    - **FAILED**: the database returned an error (see Error).
+    - **CANCELLED**: someone stopped it.
+    - **TIMED_OUT**: it went over the time limit configured by your administrator.
+    - **REJECTED**: refused before running, for example the SQL was not a plain read.
+    - **ROLLED_BACK**: a write preview, undone on purpose.
+    - **DRIFTED**: the data changed between preview and confirm, so the write was rolled back.
+- key: table:sql_workbench_execution;field:backendName
+  summary: The database the SQL ran against.
+- key: table:sql_workbench_execution;field:userId
+  summary: The sign-in id of the person who ran it.
+- key: table:sql_workbench_execution;field:userName
+  summary: The display name of the person who ran it, as it was at the time.
+- key: table:sql_workbench_execution;field:startTime
+  summary: When the run started.
+- key: table:sql_workbench_execution;field:endTime
+  summary: When the run finished; blank while it is still running.
+- key: table:sql_workbench_execution;field:durationMs
+  summary: How long the run took, in milliseconds.
+- key: table:sql_workbench_execution;field:rowsReturned
+  summary: How many result rows a read returned, up to the configured row limit.
+- key: table:sql_workbench_execution;field:rowsAffected
+  summary: How many rows a write changed or, for a preview, would change.
+- key: table:sql_workbench_execution;field:truncated
+  summary: Yes when the result hit the row or size limit and was cut short.
+- key: table:sql_workbench_execution;field:statementCount
+  summary: How many SQL statements the run contained. Read-only runs allow one.
+- key: table:sql_workbench_execution;field:statementKinds
+  summary: The kinds of statement the run was classified as, separated by commas.
+- key: table:sql_workbench_execution;field:notebookId
+  summary: The notebook the run came from; blank for SQL run outside a notebook.
+- key: table:sql_workbench_execution;field:cellKey
+  summary: The key of the notebook cell that was run, if any.
+- key: table:sql_workbench_execution;field:sqlText
+  summary: The exact SQL that was run (or refused). It can contain sensitive literals, so treat it as confidential.
+- key: table:sql_workbench_execution;field:sqlHash
+  summary: A fingerprint of the database, SQL and parameters, useful for spotting repeated queries.
+- key: table:sql_workbench_execution;field:parametersJson
+  summary: The values bound to the named parameters for this run, stored as written.
+- key: table:sql_workbench_execution;field:errorMessage
+  summary: The error text when the run failed, timed out or was rejected, cut off at 4,000 characters.
+- key: table:sql_workbench_execution;field:clientIp
+  summary: The network address the request came from, when it was available.
+- key: process:sqlWorkbenchShareNotebook;slot:help
+  summary: Share the selected notebook, read-only, with one user, one group or everyone who can use the SQL Workbench.
+  content: |
+    Select one notebook, choose who to share with, and run. Recipients can open the notebook but cannot change it; to edit, they duplicate it into their own copy. Only the owner or an administrator changes the original.
+
+    Sharing with a **User** gives that person read access. Sharing with **Everyone** puts it in the shared library. Sharing needs the notebook share permission. To stop sharing, delete the share under **Shares** on the notebook.
+- key: process:sqlWorkbenchShareNotebook;field:audienceType
+  summary: 'Who gets access: one user, one group, or everyone.'
+  content: |
+    Choose **User** or **Group** and fill in the next field, or **Everyone (shared library)** to share with every workbench user.
+- key: process:sqlWorkbenchShareNotebook;field:audienceId
+  summary: The user name or group name to share with; leave blank when sharing with everyone.
+  content: |
+    Names are not case sensitive. Required for User and Group.
+- key: process:sqlWorkbenchDuplicateNotebook;slot:help
+  summary: Make your own copy of a notebook you can open, with all its cells, parameters and default database.
+  content: |
+    The copy is titled "Copy of" followed by the original title, is owned by you, and starts at version 1 with the note "Duplicated from notebook" and the original's number. Sharing, pinned results and run history are not copied. Duplicate a shared notebook to change it, since shared access is read-only. Works on one notebook at a time.
+- key: process:sqlWorkbenchRestoreNotebookVersion;slot:help
+  summary: Bring back an earlier saved version of a notebook you own.
+  content: |
+    Select one version under **Versions** and run. The notebook's content goes back to that version and is saved as a new version, with the comment "Restored version" and the number. Other retained versions stay in the history, subject to the retention limit. You must own the notebook to use this action.
+- key: widget:sql_workbench_notebook_join_sql_workbench_cell;slot:label
+  summary: 'The notebook''s cells, in order: each is a block of SQL or Markdown notes.'
+- key: widget:sql_workbench_notebook_join_sql_workbench_notebook_share;slot:label
+  summary: 'Who this notebook is shared with: users, groups, or everyone.'
+- key: widget:sql_workbench_notebook_join_sql_workbench_result_snapshot;slot:label
+  summary: Query results pinned to this notebook, kept as they were when pinned.
+- key: widget:sql_workbench_notebook_join_sql_workbench_notebook_version;slot:label
+  summary: Every saved version of this notebook, newest first; use Restore Version to bring one back.
+- key: widget:sql_workbench_notebook_join_sql_workbench_execution;slot:label
+  summary: Recent runs of this notebook's queries, with who ran them and how they ended.
+- key: widget:sqlWorkbenchWidget;slot:label
+  summary: 'The SQL Workbench runner: write, run and save SQL notebooks against your available databases.'
+- key: widget:sqlWorkbenchHomeSummary;slot:label
+  summary: Counts of notebooks, runs today, runs and failures in the last 7 days, and writes in the last 30 days.
+- key: widget:sqlWorkbenchHomeRunsPerDay;slot:label
+  summary: A line chart of runs, failures and committed writes for each of the last 30 days.
+- key: widget:sqlWorkbenchHomeRecentNotebooks;slot:label
+  summary: The 10 notebooks changed most recently that you can open.
+- key: widget:sqlWorkbenchHomeRecentRuns;slot:label
+  summary: The 10 most recent query runs you can see.
+- key: widget:sqlWorkbenchHomeSlowestQueries;slot:label
+  summary: The 10 slowest completed query runs of the last 30 days.
+- key: widget:sqlWorkbenchHomeFailedQueries;slot:label
+  summary: The latest failed, timed-out, rejected or rolled-back runs of the last 30 days, with the error.
+- key: widget:sqlWorkbenchHomeMostUsedNotebooks;slot:label
+  summary: The notebooks with the most runs in the last 30 days, with the number of users and the last run.
+- key: widget:sqlWorkbenchHomeSharedNotebooks;slot:label
+  summary: Notebooks that have been shared, who owns them, who they are shared with and since when.
+- key: widget:sqlWorkbenchHomeWrites;slot:label
+  summary: 'Changes committed to the database through the workbench: who, what, when, and how many rows.'
+- key: widget:sqlWorkbenchHomeActivityByUser;slot:label
+  summary: Runs, failures and writes per user over the last 30 days; visible to workbench admins.
+- key: widget:sqlWorkbenchNotebookOpenInRunner;slot:label
+  summary: A button on a notebook that opens it in the runner to edit and run its cells.
+- key: possibleValueSource:sql_workbench_share_audience_type;slot:help
+  summary: Who a notebook can be shared with.
+  content: |
+    - **User**: one named person.
+    - **Group**: everyone in a named group.
+    - **Everyone (shared library)**: every workbench user.
+- key: possibleValueSource:sql_workbench_cell_type;slot:help
+  summary: What a notebook cell holds.
+  content: |
+    - **SQL**: a query you can run.
+    - **Markdown**: formatted notes that are not run.
+- key: possibleValueSource:sql_workbench_backend;slot:help
+  summary: The databases your administrator makes available for workbench queries.
+- key: possibleValueSource:sql_workbench_notebook;slot:help
+  summary: Choose a notebook you can access by its title.
+- key: process:sql_workbench_notebook.bulkInsert;slot:help
+  summary: Create notebooks from a file.
+  content: |
+    Upload your file and map its columns to the fields in **{{label:sql_workbench_notebook}}**. Review the input before creating records. The same permissions and validation apply as when you add a single record.
+- key: process:sql_workbench_notebook.bulkEdit;slot:help
+  summary: Change selected notebooks together.
+  content: |
+    Select the records to change in **{{label:sql_workbench_notebook}}**, choose the fields and enter their new values. Review your changes before applying them. You can change only records you have permission to edit.
+- key: process:sql_workbench_notebook.bulkEditWithFile;slot:help
+  summary: Update notebooks using values from a file.
+  content: |
+    Upload your file and map its columns to the fields in **{{label:sql_workbench_notebook}}**. Match the rows to existing records and review the changes. Your normal edit permissions and field validation still apply.
+- key: process:sql_workbench_notebook.bulkDelete;slot:help
+  summary: Delete selected notebooks.
+  content: |
+    Review your selected records in **{{label:sql_workbench_notebook}}** before confirming deletion. You can delete only records you have permission to remove. Deleting a notebook also removes its cells, shares, snapshots and versions; execution audit rows remain subject to retention.
+- key: process:sql_workbench_cell.bulkInsert;slot:help
+  summary: Create cells from a file.
+  content: |
+    Upload your file and map its columns to the fields in **{{label:sql_workbench_cell}}**. Review the input before creating records. The same permissions and validation apply as when you add a single record.
+- key: process:sql_workbench_cell.bulkEdit;slot:help
+  summary: Change selected cells together.
+  content: |
+    Select the records to change in **{{label:sql_workbench_cell}}**, choose the fields and enter their new values. Review your changes before applying them. You can change only records you have permission to edit.
+- key: process:sql_workbench_cell.bulkEditWithFile;slot:help
+  summary: Update cells using values from a file.
+  content: |
+    Upload your file and map its columns to the fields in **{{label:sql_workbench_cell}}**. Match the rows to existing records and review the changes. Your normal edit permissions and field validation still apply.
+- key: process:sql_workbench_cell.bulkDelete;slot:help
+  summary: Delete selected cells.
+  content: |
+    Review your selected records in **{{label:sql_workbench_cell}}** before confirming deletion. You can delete only records you have permission to remove.
+- key: process:sql_workbench_notebook_share.bulkInsert;slot:help
+  summary: Create shares from a file.
+  content: |
+    Upload your file and map its columns to the fields in **{{label:sql_workbench_notebook_share}}**. Review the input before creating records. The same permissions and validation apply as when you add a single record.
+- key: process:sql_workbench_notebook_share.bulkEdit;slot:help
+  summary: Change selected shares together.
+  content: |
+    Select the records to change in **{{label:sql_workbench_notebook_share}}**, choose the fields and enter their new values. Review your changes before applying them. You can change only records you have permission to edit.
+- key: process:sql_workbench_notebook_share.bulkEditWithFile;slot:help
+  summary: Update shares using values from a file.
+  content: |
+    Upload your file and map its columns to the fields in **{{label:sql_workbench_notebook_share}}**. Match the rows to existing records and review the changes. Your normal edit permissions and field validation still apply.
+- key: process:sql_workbench_notebook_share.bulkDelete;slot:help
+  summary: Delete selected shares.
+  content: |
+    Review your selected records in **{{label:sql_workbench_notebook_share}}** before confirming deletion. You can delete only records you have permission to remove. Removing a share ends that access grant; other shares can still allow access.
+- key: process:sql_workbench_result_snapshot.bulkEdit;slot:help
+  summary: Change selected snapshots together.
+  content: |
+    Select the records to change in **{{label:sql_workbench_result_snapshot}}**, choose the fields and enter their new values. Review your changes before applying them. You can change only records you have permission to edit. Only the snapshot label is editable.
+- key: process:sql_workbench_result_snapshot.bulkEditWithFile;slot:help
+  summary: Update snapshots using values from a file.
+  content: |
+    Upload your file and map its columns to the fields in **{{label:sql_workbench_result_snapshot}}**. Match the rows to existing records and review the changes. Your normal edit permissions and field validation still apply. Only the snapshot label is editable.
+- key: process:sql_workbench_result_snapshot.bulkDelete;slot:help
+  summary: Delete selected snapshots.
+  content: |
+    Review your selected records in **{{label:sql_workbench_result_snapshot}}** before confirming deletion. You can delete only records you have permission to remove.
