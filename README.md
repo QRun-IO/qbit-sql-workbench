@@ -16,7 +16,7 @@ The full design (architecture, data model, security model, limits, API contract,
 
 ## Requirements
 
-- Java 21 and QQQ `4.1.0-RC.6` or later (the UI API extension contract, qqq#1128).
+- Java 21 and QQQ `4.1.0-RC.7` or later (UI API extensions and help bundles).
 - `qqq-backend-module-rdbms` for the targets. `qqq-middleware-javalin` for the REST routes; it is optional, and without it the engine still works but no routes are registered.
 - A Next UI release that renders the `SQL_WORKBENCH` widget.
 
@@ -54,6 +54,14 @@ The producer adds the following to the instance:
 - **All 21 `/qqq/v1/sql-workbench/*` operations**, registered as the `sql-workbench` UI API extension. The producer preserves the established prefix; strict UI API route checking is supported. The generated [OpenAPI fragment](src/main/resources/openapi/qqq-v1/sql-workbench.yaml) covers JSON and streaming exports. See [the contract and operation catalog](docs/UI-API.md).
 
 To move the app under another app (for example an Admin app), re-parent `SqlWorkbenchQBitProducer.APP_NAME` after producing; the Runner moves with it. Open a notebook in the Runner with `/app/sqlWorkbenchRunner?notebook=<id>`.
+
+## In-app help
+
+The producer registers [help/qbit-sql-workbench.yaml](src/main/resources/help/qbit-sql-workbench.yaml), a `QBIT` bundle with summaries, Markdown help and live metadata references. Hosts with `helpContent` load help and call `HelpBundles.syncOnStartup(qInstance)` after defining metadata. Registration itself needs no help table; app/table inline help remains available without one.
+
+To override wording, register your own resource with `HelpBundles.register(qInstance, "help/my-host.yaml")`, set `layer: HOST`, and use the same entry `key` and `role` (default `ALL_SCREENS`). HOST text takes precedence over QBIT text; user-edited help is preserved by sync. Keep the bundle's literal version aligned with the POM version when releasing.
+
+`SqlWorkbenchHelpBundleTest` uses `HelpBundleAssertions` to check ownership coverage, keys, summary lengths and live references, including generated table actions. Run it with `./mvnw -q test -Dtest=SqlWorkbenchHelpBundleTest`; it also verifies registration without a help table.
 
 ## App home
 
@@ -103,7 +111,7 @@ public class SnakeCaseCustomizer implements MetaDataCustomizerInterface<QTableMe
 
 ## Starter defaults and retention
 
-All six tables are user content (notebooks, cells, shares, pinned snapshots) or logs (versions, the execution audit), so none is seeded: they start empty, and each table's help (`help/sql-workbench.yaml`, shown on the table screen) says how its rows get created. No host include or action is needed.
+All six tables are user content (notebooks, cells, shares, pinned snapshots) or logs (versions, the execution audit), so none is seeded: they start empty, and each table's help (`help/qbit-sql-workbench.yaml`, shown on the table screen) says how its rows get created. No host include or action is needed.
 
 Retention: `notebookVersionRetention` (default 100) prunes the oldest versions of a notebook on save. `auditRetentionDays` (default null: keep forever) deletes execution audit rows older than that many days, in the background in bounded batches, at most once an hour per process, triggered as a run is audited.
 
