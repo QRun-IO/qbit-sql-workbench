@@ -98,7 +98,29 @@ class SqlWorkbenchEndpointSpecTest extends BaseSqlWorkbenchTest
          builder.header("Content-Type", contentType);
       }
       builder.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
-      return (client.send(builder.build(), HttpResponse.BodyHandlers.ofString()));
+      HttpResponse<String> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+      if(response.statusCode() >= 400)
+      {
+         assertErrorBody(response);
+      }
+      return (response);
+   }
+
+
+
+   /*******************************************************************************
+    ** HTTP errors retain their message and include the standard diagnostic fields.
+    *******************************************************************************/
+   private static void assertErrorBody(HttpResponse<String> response) throws Exception
+   {
+      Map<String, Object> body = json(response);
+      assertThat(body).containsKeys("error", "code", "message", "traceId");
+      for(String key : List.of("error", "code", "message", "traceId"))
+      {
+         assertThat(body.get(key)).as(key).isInstanceOf(String.class);
+         assertThat((String) body.get(key)).as(key).isNotBlank();
+      }
+      assertThat(body.get("message")).isEqualTo(body.get("error"));
    }
 
 
@@ -236,7 +258,9 @@ class SqlWorkbenchEndpointSpecTest extends BaseSqlWorkbenchTest
          HttpRequest unauthenticated = HttpRequest.newBuilder(URI.create(base + path))
             .header("Authorization", "Bearer Deny")
             .method(method, HttpRequest.BodyPublishers.noBody()).build();
-         assertThat(client.send(unauthenticated, HttpResponse.BodyHandlers.ofString()).statusCode()).as(method + " authentication").isEqualTo(401);
+         HttpResponse<String> denied = client.send(unauthenticated, HttpResponse.BodyHandlers.ofString());
+         assertThat(denied.statusCode()).as(method + " authentication").isEqualTo(401);
+         assertErrorBody(denied);
       }
       assertThat(json(send("GET", "/history", READER, null, null)).get("executions")).asList().isEmpty();
    }

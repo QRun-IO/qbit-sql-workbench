@@ -43,7 +43,7 @@ public class SqlWorkbenchEndpoints
    public static MiddlewareSpecExtension extension()
    {
       return (new MiddlewareSpecExtension().withName("sql-workbench").withPathPrefix("/sql-workbench")
-         .withSemanticVersion("1.0.0").withDescription("Audited SQL execution and notebooks")
+         .withSemanticVersion("1.1.0").withDescription("Audited SQL execution and notebooks")
          .withSpec(GetCapabilitiesSpec.class)
          .withSpec(GetSchemaSpec.class)
          .withSpec(ExecuteSpec.class)
