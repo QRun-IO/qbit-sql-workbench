@@ -36,6 +36,7 @@ public class SqlWorkbenchSchemas
    {
       Map<String, Schema> schemas = new LinkedHashMap<>();
       schemas.put("SqlWorkbenchErrorV1", new Schema().withType(Type.OBJECT)
+         .withDescription("Deprecated since 1.1.0: errors use BasicErrorResponseV1.")
          .withProperty("error", new Schema().withType(Type.STRING)));
       schemas.put("SqlWorkbenchEmptyRequestV1", new Schema().withType(Type.OBJECT));
       schemas.put("SqlWorkbenchDeletedV1", new Schema().withType(Type.OBJECT)

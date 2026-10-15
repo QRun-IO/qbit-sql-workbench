@@ -33,6 +33,7 @@ import com.kingsrook.qqq.middleware.javalin.QJavalinUtils;
 import com.kingsrook.qqq.middleware.javalin.specs.BasicOperation;
 import com.kingsrook.qqq.middleware.javalin.specs.BasicResponse;
 import com.kingsrook.qqq.middleware.javalin.specs.extensions.AbstractJsonEndpointSpec;
+import com.kingsrook.qqq.middleware.javalin.specs.v1.responses.BasicErrorResponseV1;
 import com.kingsrook.qqq.openapi.model.HttpMethod;
 import com.kingsrook.qqq.openapi.model.In;
 import com.kingsrook.qqq.openapi.model.Method;
@@ -155,11 +156,11 @@ public abstract class SqlWorkbenchJsonSpec extends AbstractJsonEndpointSpec
     *******************************************************************************/
    static List<BasicResponse> errors()
    {
-      return (List.of(new BasicResponse(HttpStatus.BAD_REQUEST, "Invalid input or execution limit exceeded", "SqlWorkbenchErrorV1"),
-         new BasicResponse(HttpStatus.UNAUTHORIZED, "Sign in required", "SqlWorkbenchErrorV1"),
-         new BasicResponse(HttpStatus.FORBIDDEN, "Permission denied", "SqlWorkbenchErrorV1"),
-         new BasicResponse(HttpStatus.NOT_FOUND, "Missing or invisible resource", "SqlWorkbenchErrorV1"),
-         new BasicResponse(HttpStatus.CONFLICT, "Execution UUID already used", "SqlWorkbenchErrorV1")));
+      return (List.of(new BasicResponse(HttpStatus.BAD_REQUEST, "Invalid input or execution limit exceeded", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.UNAUTHORIZED, "Sign in required", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.FORBIDDEN, "Permission denied", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.NOT_FOUND, "Missing or invisible resource", BasicErrorResponseV1.class.getSimpleName()),
+         new BasicResponse(HttpStatus.CONFLICT, "Execution UUID already used", BasicErrorResponseV1.class.getSimpleName())));
    }
 
 
