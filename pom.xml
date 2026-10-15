@@ -156,6 +156,7 @@
             <directory>src/main/resources</directory>
             <filtering>true</filtering>
             <includes>
+               <include>help/*.yaml</include>
                <include>sql-workbench.properties</include>
             </includes>
          </resource>
@@ -163,6 +164,7 @@
             <directory>src/main/resources</directory>
             <filtering>false</filtering>
             <excludes>
+               <exclude>help/*.yaml</exclude>
                <exclude>sql-workbench.properties</exclude>
             </excludes>
          </resource>
