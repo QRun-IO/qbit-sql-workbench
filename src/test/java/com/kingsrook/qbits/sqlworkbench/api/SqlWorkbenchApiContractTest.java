@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 import com.kingsrook.qqq.middleware.javalin.specs.v1.MiddlewareVersionV1;
+import com.kingsrook.qqq.middleware.javalin.specs.v1.responses.BasicErrorResponseV1;
 import com.kingsrook.qqq.middleware.javalin.tools.UiApiContract;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,7 +51,7 @@ class SqlWorkbenchApiContractTest
       assertThat(UiApiContract.check(generated, Files.readString(path), null, 1,
          "./mvnw -Dtest=SqlWorkbenchApiContractTest -DsqlWorkbench.openapi.update=true test")).isEmpty();
       var model = version.generateExtensionOpenAPIModel("qqq", extension);
-      assertThat(model.getComponents().getSchemas().keySet()).allMatch(name -> name.startsWith("SqlWorkbench"));
+      assertThat(model.getComponents().getSchemas().keySet()).allMatch(name -> name.startsWith("SqlWorkbench") || name.equals(BasicErrorResponseV1.class.getSimpleName()));
       assertThat(model.getPaths().keySet()).allMatch(name -> name.startsWith("/qqq/v1/sql-workbench/"));
       assertThat(extension.getSpecs()).hasSize(21);
       assertThat(extension.getEffectivePathPrefix()).isEqualTo("/sql-workbench");

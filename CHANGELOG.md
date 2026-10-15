@@ -16,6 +16,7 @@ All notable changes to this project are documented here. The format follows Keep
 - **Record developer panel** "SQL Workbench" (`SqlWorkbenchDeveloperPanelProvider`, registered by `SqlWorkbenchDeveloperPanelsMetaDataProducer`): read-only `SELECT`s for the record and its table in the backend's own names, backend details, and links that open them in the Runner as a new cell (`/app/sqlWorkbenchRunner?sql=&backend=`, never run). Requires QQQ 4.1.0-RC.4 (the developer panel contract) and a Next UI with the Runner `?sql=` support.
 
 ### Changed
+- UI API extension sql-workbench 1.1.0 (requires QQQ 4.1.0-RC.14, UI API 1.6.0): operationIds, standard error responses with BasicErrorResponseV1, extension tags, and deprecated SqlWorkbenchErrorV1 retained for compatibility. Existing operationIds, HTTP statuses and success payloads are preserved.
 - Require QQQ `4.1.0-RC.6` for the UI API extension contract. Replace the raw Javalin route provider with endpoint specs registered by the qbit producer. `registerRoutes=false` still disables HTTP registration. No existing operation wire changes.
 - **The nav lists only the main tables**: Notebooks and the execution audit, after the Runner. Cells, versions, pinned results and shares are child lists on a notebook (still standard tables, reachable by URL and API). The app's widget list is now the dashboard, not the `SQL_WORKBENCH` widget; links to `/app/sqlWorkbench` that expected the editor should point at `/app/sqlWorkbenchRunner`.
 - The notebook record's header shows the description.
